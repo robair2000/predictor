@@ -144,11 +144,14 @@ def push_to_github():
 
         subprocess.run(['git', 'commit', '-m', 'Auto-update trained ML models [skip ci]'], check=True)
         
-        # Bepaal automatisch de actuele branch naam (bijv. main of master)
+        # Bepaal de actuele branch
         branch_res = subprocess.run(['git', 'branch', '--show-current'], capture_output=True, text=True, check=True)
         current_branch = branch_res.stdout.strip() or 'main'
         
-        # Push naar de juiste branch
+        # Haal eventuele remote wijzigingen eerst op en voeg ze samen (rebase)
+        subprocess.run(['git', 'pull', '--rebase', repo_url, current_branch], check=True)
+        
+        # Push naar GitHub
         push_res = subprocess.run(['git', 'push', repo_url, f'HEAD:{current_branch}'], capture_output=True, text=True)
         
         if push_res.returncode == 0:
