@@ -66,13 +66,10 @@ send_alert = st.sidebar.button('Stuur Signaal Test')
 def load_market_data(ticker, interval, period):
   try:
     df = yf.download(ticker, period=period, interval=interval, progress=False)
-    
-    # Fallback voor Arbitrum en Canton indien Yahoo Finance faalt
     if (df is None or df.empty) and ticker == 'ARB-USD':
       df = yf.download('ARB1-USD', period=period, interval=interval, progress=False)
     if (df is None or df.empty) and ticker == 'CC-USD':
       df = yf.download('CC1-USD', period=period, interval=interval, progress=False)
-      
     if df is None or df.empty:
       return None
 
@@ -251,7 +248,7 @@ st.markdown('---')
 with st.spinner(f'Laden van gedetailleerde quant data voor {selected_asset_name}...'):
   df = load_market_data(asset_info['yf'], tf_info['interval'], tf_info['period'])
   if df is None or df.empty or len(df) < 50:
-    st.error(f"Onvoldoende historische data voor {selected_asset_name} op tijdschaal {selected_tf_name}. Kies een andere tijdschaal of asset.")
+    st.error(f"Onvoldoende historische data voor **{selected_asset_name}** op tijdschaal **{selected_tf_name}**. Kies een grotere tijdschaal (bijv. 1 Uur of Daily) of een andere asset.")
     st.stop()
 
   df = add_advanced_indicators(df, tf_info['bars_per_day'])
