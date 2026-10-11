@@ -20,7 +20,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("⚡ Autonomous Crypto Quant Dashboard")
+st.title("⚡ RV Predictor is live")
 st.markdown("*Real-time machine learning voorspellingen gevoed door een 24/7 achtergrond-worker.*")
 
 # Sidebar: Asset keuze & Tijdinterval (Timescales)
