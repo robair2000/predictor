@@ -1,13 +1,8 @@
-import os
-import requests
 import pandas as pd
 import numpy as np
 import yfinance as yf
 import xgboost as xgb
 from sklearn.model_selection import train_test_split
-
-# Configuratie via GitHub Secrets of directe instelling
-WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
 
 asset_options = {
     'Bitcoin (BTC)': {'yf': 'BTC-USD', 'binance': 'BTCUSDT', 'icon': '⚡'},
@@ -29,7 +24,6 @@ def load_data(ticker):
         df['Date'] = pd.to_datetime(df['Date'])
         df = df.sort_values('Date').dropna(subset=['close']).reset_index(drop=True)
         
-        # Indicatoren toevoegen
         df['daily_close'] = df['close']
         df['daily_SMA50'] = df['close'].rolling(window=50).mean().bfill()
         
@@ -90,7 +84,7 @@ def load_data(ticker):
         df['VWAP_distance'] = (df['close'] - df['VWAP']) / (df['VWAP'] + 1e-8)
         
         df['mtf_trend_bullish'] = (df['daily_close'] > df['daily_SMA50']).astype(int)
-        df['fear_greed'] = 50.0  # Standaard fallback voor worker
+        df['fear_greed'] = 50.0
         return df.dropna().reset_index(drop=True)
     except Exception as e:
         print(f"Fout bij laden {ticker}: {e}")
@@ -103,9 +97,8 @@ features = [
     'Fib_618_distance', 'fear_greed', 'mtf_trend_bullish'
 ]
 
-def run_quant_scan():
-    print("Start automatische quant scan...")
-    reports = []
+def run_ml_training():
+    print("Start automatische achtergrond machine learning training...")
     
     for name, info in asset_options.items():
         df = load_data(info['yf'])
@@ -126,24 +119,7 @@ def run_quant_scan():
         pred_p = model.predict(latest_data)[0]
         pct_diff = ((pred_p - curr_p) / curr_p) * 100
         
-        is_bull = bool(df['mtf_trend_bullish'].iloc[-1])
-        rsi = float(df['RSI'].iloc[-1])
-        adx = float(df['ADX'].iloc[-1])
-        
-        report = f"{info['icon']} **{name}** | Koers: ${curr_p:,.3f} | Doel: ${pred_p:,.3f} ({pct_diff:+.2f}%) | ADX: {adx:.1f}"
-        reports.append(report)
-        
-        # Webhook sturen als er een sterke beweging is (> 0.5% voorspelling en bullish)
-        if pct_diff > 0.5 and is_bull and WEBHOOK_URL:
-            payload = {
-                "content": f"🚨 **QUANT SIGNAL ALERT** 🚨\n{report}\nSetup is sterk bullish!"
-            }
-            try:
-                requests.post(WEBHOOK_URL, json=payload, timeout=5)
-            except Exception as e:
-                print(f"Webhook fout: {e}")
-
-    print("\n".join(reports))
+        print(f"[{name}] XGBoost model hertraind! Huidige koers: ${curr_p:,.3f} | Voorspelling: ${pred_p:,.3f} ({pct_diff:+.2f}%)")
 
 if __name__ == "__main__":
-    run_quant_scan()
+    run_ml_training()
