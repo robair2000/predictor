@@ -148,10 +148,11 @@ def push_to_github():
         branch_res = subprocess.run(['git', 'branch', '--show-current'], capture_output=True, text=True, check=True)
         current_branch = branch_res.stdout.strip() or 'main'
         
-        # Haal eventuele remote wijzigingen eerst op en voeg ze samen (rebase)
-        subprocess.run(['git', 'pull', '--rebase', repo_url, current_branch], check=True)
+        # Haal eerst de remote wijzigingen op en merge ze automatisch
+        subprocess.run(['git', 'fetch', repo_url, current_branch], check=True)
+        subprocess.run(['git', 'merge', f'FETCH_HEAD', '--no-edit', '-X', 'theirs'], check=True)
         
-        # Push naar GitHub
+        # Push direct naar GitHub
         push_res = subprocess.run(['git', 'push', repo_url, f'HEAD:{current_branch}'], capture_output=True, text=True)
         
         if push_res.returncode == 0:
