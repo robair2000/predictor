@@ -11,21 +11,18 @@ from sklearn.model_selection import train_test_split
 
 # --- STREAMLIT PAGINA CONFIGURATIE ---
 st.set_page_config(
-    page_title='Multi-Asset Multi-Timeframe Quant Dashboard',
+    page_title='Institutional Multi-Asset Quant & Confluence Dashboard',
     page_icon='⚡',
     layout='wide',
 )
 
-st.title('⚡ Multi-Asset Multi-Timeframe Quant Model')
+st.title('⚡ Institutional Multi-Asset Multi-Timeframe Quant Model')
 st.markdown(
-    'Dit professionele dashboard combineert **flexibele orderflow**, **Multi-Timeframe'
-    ' Trend Filter**, **ATR Risk Management** en **Backtesting** voor een'
-    ' uitgebreide suite van crypto-assets — 100% feitelijke data.'
+    'Professioneel quant dashboard met **Multi-Asset Overzichtstabel**, **Confluence Score**, '
+    '**Sharpe/Sortino Backtesting**, **ATR Risk Management** en **SHAP Explainability** — 100% feitelijke data.'
 )
 
-# --- SIDEBAR CONFIGURATIE ---
-st.sidebar.header('⚙️ Asset & Tijdschaal Instellingen')
-
+# --- ASSET & TIJDSCHAAL CONFIGURATIE ---
 asset_options = {
     'Chainlink (LINK)': {'yf': 'LINK-USD', 'binance': 'LINKUSDT', 'icon': '🔗'},
     'Ethereum (ETH)': {'yf': 'ETH-USD', 'binance': 'ETHUSDT', 'icon': 'Ξ'},
@@ -37,12 +34,6 @@ asset_options = {
     'Canton (CC)': {'yf': 'CC-USD', 'binance': 'CCUSDT', 'icon': '🌐'},
 }
 
-selected_asset_name = st.sidebar.selectbox(
-    'Selecteer Asset', list(asset_options.keys())
-)
-asset_info = asset_options[selected_asset_name]
-
-# Tijdschaal mapping voor Yahoo Finance
 timeframe_options = {
     '15 Minuten (15m)': {'interval': '15m', 'period': '30d', 'bars_per_day': 96},
     '30 Minuten (30m)': {'interval': '30m', 'period': '60d', 'bars_per_day': 48},
@@ -53,9 +44,11 @@ timeframe_options = {
     '1 Maand (1mo)': {'interval': '1mo', 'period': 'max', 'bars_per_day': 1},
 }
 
-selected_tf_name = st.sidebar.selectbox(
-    'Selecteer Tijdschaal (Candle)', list(timeframe_options.keys())
-)
+st.sidebar.header('⚙️ Dashboard Instellingen')
+selected_asset_name = st.sidebar.selectbox('Selecteer Hoofdasset', list(asset_options.keys()))
+asset_info = asset_options[selected_asset_name]
+
+selected_tf_name = st.sidebar.selectbox('Selecteer Tijdschaal (Candle)', list(timeframe_options.keys()))
 tf_info = timeframe_options[selected_tf_name]
 
 test_size = st.sidebar.slider('Test / Train Splitsing (%)', 10, 40, 20, step=5)
@@ -68,38 +61,33 @@ webhook_url = st.sidebar.text_input('Discord/Telegram Webhook URL')
 send_alert = st.sidebar.button('Stuur Signaal Test')
 
 
-# --- DATA OPHAAL (Gekozen Tijdschaal + Daily Trend) ---
+# --- DATA FUNCTIES ---
 @st.cache_data(ttl=300)
 def load_market_data(ticker, interval, period):
   try:
     df = yf.download(ticker, period=period, interval=interval, progress=False)
     
-    # Specifieke fallback voor Canton als Yahoo Finance geen data retourneert onder CC-USD
+    # Fallback voor Arbitrum en Canton indien Yahoo Finance faalt
+    if (df is None or df.empty) and ticker == 'ARB-USD':
+      df = yf.download('ARB1-USD', period=period, interval=interval, progress=False)
     if (df is None or df.empty) and ticker == 'CC-USD':
       df = yf.download('CC1-USD', period=period, interval=interval, progress=False)
-
+      
     if df is None or df.empty:
       return None
-      
+
     if isinstance(df.columns, pd.MultiIndex):
       df.columns = df.columns.get_level_values(0)
     df = df.reset_index()
 
     date_col = 'Datetime' if 'Datetime' in df.columns else 'Date'
-    df = df.rename(
-        columns={
-            date_col: 'Date',
-            'Open': 'open',
-            'High': 'high',
-            'Low': 'low',
-            'Close': 'close',
-            'Volume': 'volume',
-        }
-    )
+    df = df.rename(columns={date_col: 'Date', 'Open': 'open', 'High': 'high', 'Low': 'low', 'Close': 'close', 'Volume': 'volume'})
     df['Date'] = pd.to_datetime(df['Date'])
     df = df.sort_values('Date').dropna(subset=['close']).reset_index(drop=True)
 
     df_daily = yf.download(ticker, period='max', interval='1d', progress=False)
+    if (df_daily is None or df_daily.empty) and ticker == 'ARB-USD':
+      df_daily = yf.download('ARB1-USD', period='max', interval='1d', progress=False)
     if (df_daily is None or df_daily.empty) and ticker == 'CC-USD':
       df_daily = yf.download('CC1-USD', period='max', interval='1d', progress=False)
 
@@ -114,22 +102,16 @@ def load_market_data(ticker, interval, period):
 
       df['Date_only'] = df['Date'].dt.date
       df_daily['Date_only'] = df_daily['Date'].dt.date
-      df = pd.merge(
-          df,
-          df_daily[['Date_only', 'daily_close', 'daily_SMA50']],
-          on='Date_only',
-          how='left',
-      )
+      df = pd.merge(df, df_daily[['Date_only', 'daily_close', 'daily_SMA50']], on='Date_only', how='left')
       df = df.drop(columns=['Date_only']).ffill()
-    
-    # Als daily data ontbreekt, vullen we een veilige default in voor de trend
+
     if 'daily_close' not in df.columns:
       df['daily_close'] = df['close']
       df['daily_SMA50'] = df['close']
 
     df = df.dropna().reset_index(drop=True)
     return df if not df.empty else None
-  except Exception as e:
+  except Exception:
     return None
 
 
@@ -144,11 +126,8 @@ def fetch_realtime_binance_price(binance_symbol):
 
 def add_advanced_indicators(df, bars_per_day):
   vwap_window = max(24, int(bars_per_day * 4))
-  
   typical_price = (df['high'] + df['low'] + df['close']) / 3
-  df['VWAP'] = (typical_price * df['volume']).rolling(window=vwap_window).sum() / (
-      df['volume'].rolling(window=vwap_window).sum() + 1e-8
-  )
+  df['VWAP'] = (typical_price * df['volume']).rolling(window=vwap_window).sum() / (df['volume'].rolling(window=vwap_window).sum() + 1e-8)
   df['VWAP_distance'] = (df['close'] - df['VWAP']) / (df['VWAP'] + 1e-8)
 
   sma_20 = df['close'].rolling(window=20).mean()
@@ -188,25 +167,6 @@ def fetch_crypto_fear_greed():
     return 50.0
 
 
-# --- DATA LADEN VOOR GEKOZEN ASSET & TIJDSCHAAL ---
-with st.spinner(f'Laden van {selected_tf_name} data voor {selected_asset_name}...'):
-  df = load_market_data(asset_info['yf'], tf_info['interval'], tf_info['period'])
-  
-  if df is None or df.empty or len(df) < 30:
-    st.error(
-        f"⚠️ Kon geen voldoende historische data ophalen voor **{selected_asset_name}** "
-        f"via Yahoo Finance op tijdschaal **{selected_tf_name}**.\n\n"
-        "Dit komt doordat sommige recentere of kleinere altcoins (zoals Canton) "
-        "geen langetermijn-historie hebben op Yahoo Finance of een afwijkende ticker gebruiken. "
-        "Probeer een grotere tijdschaal (zoals Daily of Hourly) of selecteer een andere coin uit de suite."
-    )
-    st.stop()
-
-  df = add_advanced_indicators(df, tf_info['bars_per_day'])
-  df['fear_greed'] = fetch_crypto_fear_greed()
-  df['Target'] = df['close'].shift(-1)
-  df = df.dropna().reset_index(drop=True)
-
 features = [
     'close',
     'open',
@@ -226,47 +186,117 @@ features = [
     'mtf_trend_bullish',
 ]
 
+
+# ==========================================
+# DEEL 1: MULTI-ASSET OVERZICHTSTABEL (GRID)
+# ==========================================
+st.subheader('🌐 Multi-Asset Real-Time Overzicht & Signalen')
+overview_data = []
+
+with st.spinner('Bezig met doorlichten van alle assets in de suite...'):
+  fng_val = fetch_crypto_fear_greed()
+  for name, info in asset_options.items():
+    df_temp = load_market_data(info['yf'], tf_info['interval'], tf_info['period'])
+    if df_temp is not None and len(df_temp) > 50:
+      df_temp = add_advanced_indicators(df_temp, tf_info['bars_per_day'])
+      df_temp['fear_greed'] = fng_val
+      df_temp['Target'] = df_temp['close'].shift(-1)
+      df_temp = df_temp.dropna().reset_index(drop=True)
+      
+      if len(df_temp) > 30:
+        X_t = df_temp[features]
+        y_t = df_temp['Target']
+        X_tr, X_te, y_tr, y_te = train_test_split(X_t, y_t, test_size=0.2, shuffle=False)
+        
+        m_temp = xgb.XGBRegressor(n_estimators=100, max_depth=3, random_state=42)
+        m_temp.fit(X_tr, y_tr)
+        
+        live_p = fetch_realtime_binance_price(info['binance'])
+        curr_p = live_p if live_p else float(df_temp['close'].iloc[-1])
+        pred_p = m_temp.predict(X_t.tail(1))[0]
+        pct_d = ((pred_p - curr_p) / curr_p) * 100
+        is_bull = bool(df_temp['mtf_trend_bullish'].iloc[-1])
+        
+        t_preds = m_temp.predict(X_te)
+        dir_acc = np.mean(np.sign(t_preds - X_te['close'].values) == np.sign(y_te.values - X_te['close'].values)) * 100
+        
+        signal = '🚀 STERK LONG' if pct_d > 0 and is_bull else ('⚠️ CONTRA-LONG' if pct_d > 0 else '📉 SHORT')
+        
+        overview_data.append({
+            'Asset': f"{info['icon']} {name}",
+            'Koers': f"${curr_p:,.3f}",
+            'Voorspelling': f"${pred_p:,.3f} ({pct_d:+.2f}%)",
+            'Signaal': signal,
+            'Dagtrend': '🟢 Bullish' if is_bull else '🔴 Bearish',
+            'Win-Rate': f"{dir_acc:.1f}%"
+        })
+        continue
+
+    overview_data.append({
+        'Asset': f"{info['icon']} {name}",
+        'Koers': 'N.B. / Geen Data',
+        'Voorspelling': '-',
+        'Signaal': 'Onvoldoende data voor tijdschaal',
+        'Dagtrend': '-',
+        'Win-Rate': '-'
+    })
+
+st.dataframe(pd.DataFrame(overview_data), use_container_width=True)
+st.markdown('---')
+
+
+# ==========================================
+# DEEL 2: DIEPE ANALYSE VOOR GEKOZEN ASSET
+# ==========================================
+with st.spinner(f'Laden van gedetailleerde quant data voor {selected_asset_name}...'):
+  df = load_market_data(asset_info['yf'], tf_info['interval'], tf_info['period'])
+  if df is None or df.empty or len(df) < 50:
+    st.error(f"Onvoldoende historische data voor {selected_asset_name} op tijdschaal {selected_tf_name}. Kies een andere tijdschaal of asset.")
+    st.stop()
+
+  df = add_advanced_indicators(df, tf_info['bars_per_day'])
+  df['fear_greed'] = fng_val
+  df['Target'] = df['close'].shift(-1)
+  df = df.dropna().reset_index(drop=True)
+
 X = df[features]
 y = df['Target']
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size / 100.0, shuffle=False)
 
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=test_size / 100.0, shuffle=False
-)
-
-# --- MODEL TRAINING ---
-model = xgb.XGBRegressor(
-    n_estimators=n_estimators, max_depth=max_depth, random_state=42
-)
+model = xgb.XGBRegressor(n_estimators=n_estimators, max_depth=max_depth, random_state=42)
 model.fit(X_train, y_train)
 score = model.score(X_test, y_test)
 
-# --- BACKTESTING SIMULATIE OP TESTSET ---
 test_preds = model.predict(X_test)
 test_actuals = y_test.values
 test_closes = X_test['close'].values
-
 pred_direction = np.sign(test_preds - test_closes)
 actual_direction = np.sign(test_actuals - test_closes)
 directional_acc = np.mean(pred_direction == actual_direction) * 100
 
-# --- DASHBOARD UI ---
+last_rsi = float(df['RSI'].iloc[-1])
+last_macd = float(df['MACD'].iloc[-1])
+is_mtf_bullish = bool(df['mtf_trend_bullish'].iloc[-1])
+confluence_points = 0
+if pred_direction[-1] > 0 and is_mtf_bullish: confluence_points += 40
+if 40 <= last_rsi <= 65: confluence_points += 30
+if last_macd > 0: confluence_points += 30
+confluence_score = min(100, max(10, confluence_points if pred_direction[-1] > 0 else 100 - confluence_points))
+
 realtime_price = fetch_realtime_binance_price(asset_info['binance'])
 current_price = realtime_price if realtime_price else float(df['close'].iloc[-1])
 current_atr = float(df['ATR'].iloc[-1])
-is_mtf_bullish = bool(df['mtf_trend_bullish'].iloc[-1])
 
 brussels_tz = ZoneInfo('Europe/Brussels')
 laatste_update = datetime.now(brussels_tz).strftime('%H:%M:%S (%d-%m-%Y)')
 
-st.subheader(f"{asset_info['icon']} Geselecteerd: {selected_asset_name} | Tijdschaal: {selected_tf_name}")
+st.subheader(f"{asset_info['icon']} Geselecteerde Hoofdasset: {selected_asset_name} ({selected_tf_name})")
 
 col1, col2, col3, col4, col5 = st.columns(5)
-col1.metric('Huidige Koers (Live)', f'${current_price:,.3f}')
+col1.metric('Huidige Koers', f'${current_price:,.3f}')
 col2.metric('Model Score ($R^2$)', f'{score:.2f}')
 col3.metric('Directional Win-Rate', f'{directional_acc:.1f}%')
-col4.metric(
-    'Daily Trend Filter', '🟢 BULLISH' if is_mtf_bullish else '🔴 BEARISH'
-)
+col4.metric('Confluence Score', f'{confluence_score}%')
 col5.metric('Laatste Call (Brussel)', laatste_update)
 
 st.markdown('---')
@@ -276,79 +306,86 @@ predicted_price = model.predict(latest_data)[0]
 price_diff = predicted_price - current_price
 percentage_diff = (price_diff / current_price) * 100
 
-stop_loss = (
-    current_price - (1.5 * current_atr)
-    if price_diff > 0
-    else current_price + (1.5 * current_atr)
-)
-take_profit = (
-    current_price + (2.5 * current_atr)
-    if price_diff > 0
-    else current_price - (2.5 * current_atr)
-)
+stop_loss = current_price - (1.5 * current_atr) if price_diff > 0 else current_price + (1.5 * current_atr)
+take_profit = current_price + (2.5 * current_atr) if price_diff > 0 else current_price - (2.5 * current_atr)
 
-st.subheader(f'🔮 Voorspelling voor de volgende {selected_tf_name} Candle & Risk Management')
+st.subheader(f'🔮 Voorspelling & Risk Management ({selected_tf_name} Candle)')
 
 col_a, col_b, col_c = st.columns(3)
-col_a.metric(
-    f'Voorspelde Prijs ({selected_tf_name})',
-    f'${predicted_price:,.3f}',
-    delta=f'{percentage_diff:+.3f}%',
-)
+col_a.metric(f'Voorspelde Prijs', f'${predicted_price:,.3f}', delta=f'{percentage_diff:+.3f}%')
 col_b.metric('Aanbevolen Stop-Loss', f'${stop_loss:,.3f}')
 col_c.metric('Aanbevolen Take-Profit', f'${take_profit:,.3f}')
 
 if predicted_price > current_price and is_mtf_bullish:
-  st.success(
-      f'**STERK LONG SIGNAAL 🚀** — Het model verwacht een stijging voor de volgende'
-      f' {selected_tf_name} candle van {selected_asset_name} (dagtrend is positief).'
-  )
+  st.success(f'**STERK LONG SETUP 🚀** — Model verwacht stijging en Confluence is hoog ({confluence_score}%).')
 elif predicted_price > current_price and not is_mtf_bullish:
-  st.warning(
-      f'**LET OP: Tegen-trend signaal ⚠️** — Model voorspelt stijging voor'
-      f' {selected_asset_name}, maar de dagelijkse trend is negatief.'
-  )
+  st.warning(f'**CONTRA-TREND LONG ⚠️** — Model voorspelt stijging, maar dagtrend is bearish.')
 else:
-  st.error(
-      f'**SHORT SIGNAAL 📉** — Het model verwacht een daling over de komende'
-      f' {selected_tf_name} candle voor {selected_asset_name}.'
-  )
+  st.error(f'**SHORT SETUP 📉** — Model verwacht daling voor de komende candle.')
 
 if send_alert and webhook_url:
   try:
-    payload = {
-        'content': (
-            f"{asset_info['icon']} **{selected_asset_name} ({selected_tf_name}) Alert**"
-            f' \nKoers: ${current_price:,.3f}\nDoel: ${predicted_price:,.3f}'
-            f' ({percentage_diff:+.3f}%)\nSL: ${stop_loss:,.3f} | TP:'
-            f' ${take_profit:,.3f}'
-        )
-    }
+    payload = {'content': f"{asset_info['icon']} **{selected_asset_name} Alert** \nKoers: ${current_price:,.3f}\nDoel: ${predicted_price:,.3f} ({percentage_diff:+.3f}%)"}
     requests.post(webhook_url, json=payload, timeout=5)
-    st.sidebar.success('Signaal succesvol verzonden via webhook!')
+    st.sidebar.success('Signaal verzonden!')
   except Exception as e:
-    st.sidebar.error(f'Fout bij versturen: {e}')
+    st.sidebar.error(f'Fout: {e}')
 
 st.markdown('---')
 
-# --- SHAP EXPLAINABILITY (Veilig ingepakt) ---
-st.subheader('🔍 SHAP Model Explainability (Waarom deze voorspelling?)')
-try:
-  import shap
-  explainer = shap.TreeExplainer(model)
-  shap_values = explainer(X.tail(1))
 
-  fig, ax = plt.subplots(figsize=(10, 4))
-  shap.plots.waterfall(shap_values[0], max_display=8, show=False)
-  st.pyplot(fig)
-  plt.close(fig)
-except Exception as e:
-  st.info('SHAP-uitleg kon tijdelijk niet worden geladen (geen impact op model).')
+# ==========================================
+# DEEL 3: BACKTEST PERFORMANCE & RATIOS
+# ==========================================
+st.subheader('📈 Geavanceerde Backtest prestaties & Ratios (Testset)')
+
+strategy_returns = np.where(pred_direction > 0, (test_actuals - test_closes) / test_closes, - (test_actuals - test_closes) / test_closes)
+strat_cum = np.cumprod(1 + strategy_returns) - 1
+bh_cum = np.cumprod(1 + (test_actuals - test_closes) / test_closes) - 1
+
+daily_strat_ret = pd.Series(strategy_returns)
+sharpe_ratio = (daily_strat_ret.mean() / (daily_strat_ret.std() + 1e-8)) * np.sqrt(252)
+downside_std = daily_strat_ret[daily_strat_ret < 0].std()
+sortino_ratio = (daily_strat_ret.mean() / (downside_std + 1e-8)) * np.sqrt(252)
+max_drawdown = (np.maximum.accumulate(1 + strat_cum) - (1 + strat_cum)).max() * 100
+
+col_r1, col_r2, col_r3 = st.columns(3)
+col_r1.metric('Sharpe Ratio (Risico-rendement)', f'{sharpe_ratio:.2f}')
+col_r2.metric('Sortino Ratio (Downside)', f'{sortino_ratio:.2f}')
+col_r3.metric('Maximum Drawdown', f'-{max_drawdown:.2f}%')
+
+fig_bt, ax_bt = plt.subplots(figsize=(10, 3))
+ax_bt.plot(strat_cum * 100, label='Quant Strategie Rendement (%)', color='#00CC66', lw=2)
+ax_bt.plot(bh_cum * 100, label='Buy & Hold Benchmark (%)', color='#888888', ls='--', lw=1.5)
+ax_bt.set_ylabel('Rendement (%)')
+ax_bt.legend(loc='upper left')
+ax_bt.grid(True, alpha=0.3)
+st.pyplot(fig_bt)
+plt.close(fig_bt)
 
 st.markdown('---')
 
-st.subheader('📊 Belangrijkste Features volgens XGBoost')
-importances = pd.Series(model.feature_importances_, index=features).sort_values(
-    ascending=True
-)
-st.bar_chart(importances)
+# --- SHAP & FEATURE IMPORTANCE ---
+col_shap, col_feat = st.columns(2)
+
+with col_shap:
+  st.subheader('🔍 SHAP Explainability')
+  try:
+    import shap
+    explainer = shap.TreeExplainer(model)
+    shap_vals = explainer(X.tail(1))
+    fig_s, ax_s = plt.subplots(figsize=(6, 3))
+    shap.plots.waterfall(shap_vals[0], max_display=6, show=False)
+    st.pyplot(fig_s)
+    plt.close(fig_s)
+  except Exception:
+    st.info('SHAP-uitleg tijdelijk niet beschikbaar.')
+
+with col_feat:
+  st.subheader('📊 Belangrijkste Features')
+  importances = pd.Series(model.feature_importances_, index=features).sort_values(ascending=True)
+  fig_f, ax_f = plt.subplots(figsize=(6, 3))
+  importances.tail(6).plot(kind='barh', ax=ax_f, color='#1f77b4')
+  ax_f.grid(True, alpha=0.3)
+  st.pyplot(fig_f)
+  plt.close(fig_f)
