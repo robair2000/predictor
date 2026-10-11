@@ -12,7 +12,7 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("⚡ Autonomous Crypto Quant Dashboard")
+st.title("⚡ RV Predictor")
 st.markdown("*Real-time machine learning voorspellingen gevoed door een 24/7 achtergrond-worker.*")
 
 # Sidebar: Asset keuze & Tijdinterval (Timescales)
