@@ -65,7 +65,7 @@ features = [
 ]
 
 # 2. Doorloopt alle assets in de worker cyclus
-for asset_name, info in assets.itemscmb(): # of assets.items()
+for asset_name, info in assets.items(): # of assets.items()
     pass
 
 for asset_name, info in assets.items():
