@@ -3,12 +3,14 @@ import numpy as np
 import yfinance as yf
 import xgboost as xgb
 from sklearn.model_selection import train_test_split
+import os
+import subprocess
 
 asset_options = {
-    'Bitcoin (BTC)': {'yf': 'BTC-USD', 'binance': 'BTCUSDT', 'icon': '⚡'},
-    'Ethereum (ETH)': {'yf': 'ETH-USD', 'binance': 'ETHUSDT', 'icon': 'Ξ'},
-    'Chainlink (LINK)': {'yf': 'LINK-USD', 'binance': 'LINKUSDT', 'icon': '🔗'},
-    'Aave (AAVE)': {'yf': 'AAVE-USD', 'binance': 'AAVEUSDT', 'icon': '👻'},
+    'Bitcoin (BTC)': {'yf': 'BTC-USD', 'file': 'model_btc.json'},
+    'Ethereum (ETH)': {'yf': 'ETH-USD', 'file': 'model_eth.json'},
+    'Chainlink (LINK)': {'yf': 'LINK-USD', 'file': 'model_link.json'},
+    'Aave (AAVE)': {'yf': 'AAVE-USD', 'file': 'model_aave.json'},
 }
 
 def load_data(ticker):
@@ -98,8 +100,9 @@ features = [
 ]
 
 def run_ml_training():
-    print("Start automatische achtergrond machine learning training...")
+    print("Start automatische achtergrond machine learning training & model opslag...")
     
+    models_updated = False
     for name, info in asset_options.items():
         df = load_data(info['yf'])
         if df is None or len(df) < 40:
@@ -114,12 +117,28 @@ def run_ml_training():
         model = xgb.XGBRegressor(n_estimators=100, max_depth=4, random_state=42)
         model.fit(X_train, y_train)
         
+        # Sla het model lokaal op
+        model.save_model(info['file'])
+        models_updated = True
+        
         curr_p = float(df['close'].iloc[-1])
         latest_data = X.iloc[-1].values.reshape(1, -1)
         pred_p = model.predict(latest_data)[0]
         pct_diff = ((pred_p - curr_p) / curr_p) * 100
         
-        print(f"[{name}] XGBoost model hertraind! Huidige koers: ${curr_p:,.3f} | Voorspelling: ${pred_p:,.3f} ({pct_diff:+.2f}%)")
+        print(f"[{name}] Model getraind en opgeslagen als {info['file']} | Koers: ${curr_p:,.3f} | Voorspelling: ${pred_p:,.3f} ({pct_diff:+.2f}%)")
+
+    # Als er nieuwe modellen zijn opgeslagen, stuur ze automatisch terug naar GitHub
+    if models_updated:
+        try:
+            subprocess.run(["git", "config", "--global", "user.name", "github-actions[bot]"], check=True)
+            subprocess.run(["git", "config", "--global", "user.email", "github-actions[bot]@users.noreply.github.com"], check=True)
+            subprocess.run(["git", "add", "model_*.json"], check=True)
+            subprocess.run(["git", "commit", "-m", "Auto-update trained ML models [skip ci]"], check=True)
+            subprocess.run(["git", "push"], check=True)
+            print("Nieuwe modellen succesvol teruggezet naar GitHub repository!")
+        except Exception as e:
+            print(f"Git push overgeslagen of niet nodig: {e}")
 
 if __name__ == "__main__":
     run_ml_training()
