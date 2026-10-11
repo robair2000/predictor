@@ -11,8 +11,8 @@ import yfinance as yf
 # Maak een gedeelde sessie aan met een browser User-Agent om rate-limits te vermijden
 session = requests.Session()
 session.headers['User-Agent'] = (
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like'
-    ' Gecko) Chrome/120.0.0.0 Safari/537.36'
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like '
+    'Gecko) Chrome/120.0.0.0 Safari/537.36'
 )
 
 # 1. Definieer de assets en hun instellingen
@@ -62,20 +62,15 @@ def evaluate_and_adapt(state, current_price):
     if state['last_prediction'] is not None:
         error = abs(state['last_prediction'] - current_price)
         print(
-            f"Vorige voorspelling: {state['last_prediction']:.2f} | Echte koers:"
-            f' {current_price:.2f} | Absolute Fout: {error:.2f}'
+            f"Vorige voorspelling: {state['last_prediction']:.2f} | Echte koers: "
+            f'{current_price:.2f} | Absolute Fout: {error:.2f}'
         )
 
         if error < state['baseline_error']:
-            print(
-                '🚀 Mutatie was succesvol! Prestatie verbeterd, parameters behouden.'
-            )
+            print('🚀 Mutatie was succesvol! Prestatie verbeterd, parameters behouden.')
             state['baseline_error'] = error
         else:
-            print(
-                '⚠️ Mutatie maakte het slechter. Automatische Rollback naar veilige'
-                ' parameters!'
-            )
+            print('⚠️ Mutatie maakte het slechter. Automatische Rollback naar veilige parameters!')
             state['learning_rate'] = state['previous_learning_rate']
             state['max_depth'] = state['previous_max_depth']
 
@@ -133,13 +128,12 @@ def push_to_github():
 
     try:
         print('🔄 Bezig met pushen van model-states naar GitHub...')
-        # PAS HIERONDER JE EIGEN GITHUB GEBRUIKERSNAAM EN REPO-NAAM AAN!
         repo_url = f'https://{github_token}@github.com/robair2000/predictor.git'
 
         subprocess.run(['git', 'config', '--global', 'user.email', 'render-worker@bot.com'], check=True)
         subprocess.run(['git', 'config', '--global', 'user.name', 'Render Quant Bot'], check=True)
         
-        # Voeg alle json-bestanden toe (zowel states als models)
+        # Voeg alle json-bestanden toe
         subprocess.run(['git', 'add', '*.json'], check=True)
         
         # Check of er wijzigingen zijn om te committeren
