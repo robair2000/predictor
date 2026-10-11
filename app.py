@@ -188,31 +188,4 @@ overview_data = []
 
 with st.spinner('Bezig met doorlichten van alle assets in de suite...'):
   fng_val = fetch_crypto_fear_greed()
-  for name, info in asset_options.items():
-    df_temp = load_market_data(info['yf'], tf_info['interval'], tf_info['period'])
-    if df_temp is not None and len(df_temp) > 30:
-      df_temp = add_advanced_indicators(df_temp, tf_info['bars_per_day'])
-      df_temp['fear_greed'] = fng_val
-      df_temp['Target'] = df_temp['close'].shift(-1)
-      df_temp = df_temp.dropna().reset_index(drop=True)
-      
-      X_t = df_temp[features]
-      y_t = df_temp['Target']
-      X_tr, X_te, y_tr, y_te = train_test_split(X_t, y_t, test_size=0.2, shuffle=False)
-      
-      m_temp = xgb.XGBRegressor(n_estimators=100, max_depth=3, random_state=42)
-      m_temp.fit(X_tr, y_tr)
-      
-      live_p = fetch_realtime_binance_price(info['binance'])
-      curr_p = live_p if live_p else float(df_temp['close'].iloc[-1])
-      pred_p = m_temp.predict(X_t.tail(1))[0]
-      pct_d = ((pred_p - curr_p) / curr_p) * 100
-      is_bull = bool(df_temp['mtf_trend_bullish'].iloc[-1])
-      
-      t_preds = m_temp.predict(X_te)
-      dir_acc = np.mean(np.sign(t_preds - X_te['close'].values) == np.sign(y_te.values - X_te['close'].values)) * 100
-      
-      signal = '🚀 STERK LONG' if pct_d > 0 and is_bull else ('⚠️ CONTRA-LONG' if pct_d > 0 else '📉 SHORT')
-      
-      overview_data.append({
-          'Asset': f"{info['icon']} {name
+  for name, info in
