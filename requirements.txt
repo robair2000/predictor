@@ -7,3 +7,5 @@ yfinance>=0.2.30
 requests>=2.31.0
 matplotlib>=3.7.0
 shap>=0.44.0
+flask>=3.0.0
+gunicorn>=21.2.0
