@@ -1,5 +1,5 @@
 import streamlit as st
-import pandas as pd
+import pandas as df_lib
 import numpy as np
 import yfinance as yf
 import xgboost as xgb
@@ -12,44 +12,45 @@ st.set_page_config(
     layout="wide"
 )
 
-# Custom Styling (Dark Mode Quant Theme)
-st.markdown("""
-    <style>
-    .main { background-color: #0e1117; color: #ffffff; }
-    .stMetric { background-color: #161b22; padding: 15px; border-radius: 8px; border: 1px solid #30363d; }
-    </style>
-""", unsafe_allow_html=True)
-
 st.title("⚡ Autonomous Crypto Quant Dashboard")
 st.markdown("*Real-time machine learning voorspellingen gevoed door een 24/7 achtergrond-worker.*")
 
-# Selectie van assets en hun gekoppelde model bestanden
+# Sidebar: Asset keuze & Tijdinterval (Timescales)
 asset_options = {
-    'Bitcoin (BTC)': {'yf': 'BTC-USD', 'file': 'model_btc.json', 'icon': '⚡'},
-    'Ethereum (ETH)': {'yf': 'ETH-USD', 'file': 'model_eth.json', 'icon': 'Ξ'},
-    'Chainlink (LINK)': {'yf': 'LINK-USD', 'file': 'model_link.json', 'icon': '🔗'},
-    'Aave (AAVE)': {'yf': 'AAVE-USD', 'file': 'model_aave.json', 'icon': '👻'},
+    'Bitcoin (BTC)': {'yf': 'BTC-USD', 'file': 'model_btc.json'},
+    'Ethereum (ETH)': {'yf': 'ETH-USD', 'file': 'model_eth.json'},
+    'Chainlink (LINK)': {'yf': 'LINK-USD', 'file': 'model_link.json'},
+    'Aave (AAVE)': {'yf': 'AAVE-USD', 'file': 'model_aave.json'},
+}
+
+interval_options = {
+    '15 Minuten (Micro ML)': {'interval': '15m', 'period': '14d'},
+    '1 Uur (Intraday)': {'interval': '1h', 'period': '60d'},
+    '1 Dag (Macro Trend)': {'interval': '1d', 'period': '1y'}
 }
 
 selected_asset_name = st.sidebar.selectbox("Selecteer Asset", list(asset_options.keys()))
-asset_info = asset_options[selected_asset_name]
+selected_interval_name = st.sidebar.selectbox("Selecteer Tijdinterval", list(interval_options.keys()))
 
-# Functie om data op te halen voor weergave in de grafiek
+asset_info = asset_options[selected_asset_name]
+interval_info = interval_options[selected_interval_name]
+
+# Functie om data op te halen op basis van de gekozen timescale
 @st.cache_data(ttl=300)
-def load_dashboard_data(ticker):
+def load_dashboard_data(ticker, interval, period):
     try:
-        df = yf.download(ticker, period="14d", interval="15m", progress=False)
+        df = yf.download(ticker, period=period, interval=interval, progress=False)
         if df is None or df.empty:
             return None
-        if isinstance(df.columns, pd.MultiIndex):
+        if isinstance(df.columns, df_lib.MultiIndex):
             df.columns = df.columns.get_level_values(0)
         df = df.reset_index()
         date_col = 'Datetime' if 'Datetime' in df.columns else 'Date'
         df = df.rename(columns={date_col: 'Date', 'Open': 'open', 'High': 'high', 'Low': 'low', 'Close': 'close', 'Volume': 'volume'})
-        df['Date'] = pd.to_datetime(df['Date'])
+        df['Date'] = df_lib.to_datetime(df['Date'])
         df = df.sort_values('Date').dropna(subset=['close']).reset_index(drop=True)
         
-        # Technische indicatoren berekenen voor de features
+        # Technische indicatoren
         df['daily_close'] = df['close']
         df['daily_SMA50'] = df['close'].rolling(window=50).mean().bfill()
         
@@ -62,7 +63,7 @@ def load_dashboard_data(ticker):
         high_low = df['high'] - df['low']
         high_close = np.abs(df['high'] - df['close'].shift())
         low_close = np.abs(df['low'] - df['close'].shift())
-        true_range = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+        true_range = df_lib.concat([high_low, high_close, low_close], axis=1).max(axis=1)
         df['ATR'] = true_range.rolling(window=14).mean()
         
         df['SMA_20'] = sma_20
@@ -89,8 +90,8 @@ def load_dashboard_data(ticker):
         down_move = df['low'].shift() - df['low']
         plus_dm = np.where((up_move > down_move) & (up_move > 0), up_move, 0.0)
         minus_dm = np.where((down_move > up_move) & (down_move > 0), down_move, 0.0)
-        plus_dm_s = pd.Series(plus_dm, index=df.index).ewm(alpha=1/14, adjust=False).mean()
-        minus_dm_s = pd.Series(minus_dm, index=df.index).ewm(alpha=1/14, adjust=False).mean()
+        plus_dm_s = df_lib.Series(plus_dm, index=df.index).ewm(alpha=1/14, adjust=False).mean()
+        minus_dm_s = df_lib.Series(minus_dm, index=df.index).ewm(alpha=1/14, adjust=False).mean()
         tr_s = true_range.ewm(alpha=1/14, adjust=False).mean()
         plus_di = 100 * (plus_dm_s / (tr_s + 1e-8))
         minus_di = 100 * (minus_dm_s / (tr_s + 1e-8))
@@ -122,33 +123,32 @@ features = [
     'Fib_618_distance', 'fear_greed', 'mtf_trend_bullish'
 ]
 
-# Laad de marktdata
-df = load_dashboard_data(asset_info['yf'])
+# Laad de data op basis van gekozen parameters
+df = load_dashboard_data(asset_info['yf'], interval_info['interval'], interval_info['period'])
 
 if df is not None and not df.empty:
     current_price = float(df['close'].iloc[-1])
     
-    # Laad het door de achtergrond-worker getrainde model (.json)
+    # Laad het opgeslagen achtergrondmodel
     model_file = asset_info['file']
     if os.path.exists(model_file):
         model = xgb.XGBRegressor()
         model.load_model(model_file)
         
-        # Doe een voorspelling op basis van de laatste rij data
         latest_features = df[features].iloc[-1].values.reshape(1, -1)
         predicted_price = model.predict(latest_features)[0]
         pct_diff = ((predicted_price - current_price) / current_price) * 100
         
-        # Layout in Streamlit
+        # Schone weergave zonder donkere achtergrondblokken
         col1, col2, col3 = st.columns(3)
         col1.metric("Huidige Koers", f"${current_price:,.2f}")
         col2.metric("XGBoost Voorspelling (Bg-Model)", f"${predicted_price:,.2f}", delta=f"{pct_diff:+.2f}%")
         col3.metric("RSI (14)", f"{df['RSI'].iloc[-1]:.1f}")
         
-        st.subheader(f"Prijsverloop & Technische Analyse: {selected_asset_name}")
+        st.subheader(f"Prijsverloop ({selected_interval_name}) - {selected_asset_name}")
         st.line_chart(df.set_index('Date')['close'])
         
     else:
-        st.warning(f"Het modelbestand `{model_file}` is nog niet gevonden. De achtergrond-worker is waarschijnlijk bezig met de eerste cyclus. Vernieuw de pagina over een paar minuten!")
+        st.warning(f"Modelbestand `{model_file}` nog niet gevonden. Wacht even op de volgende achtergrond-cyclus.")
 else:
-    st.error("Kon geen marktdata ophalen via Yahoo Finance. Probeer het later opnieuw.")
+    st.error("Kon geen marktdata ophalen voor deze selectie.")
