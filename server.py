@@ -1,30 +1,26 @@
-import os
-import subprocess
+import threading
 from flask import Flask
+from quant_worker import main as run_quant_worker  # Pas dit aan als je import anders heet
 
 app = Flask(__name__)
 
-@app.route("/", methods=["GET"])
-def home():
-    return "Quant Worker Server is actief!", 200
 
-@app.route("/run-worker", methods=["GET", "POST"])
-def run_worker():
-    try:
-        print("Start quant_worker.py...")
-        # Voer je bestaande worker script uit
-        result = subprocess.run(["python", "quant_worker.py"], capture_output=True, text=True)
-        
-        if result.returncode == 0:
-            print("Worker succesvol gedraaid!")
-            return {"status": "success", "output": result.stdout}, 200
-        else:
-            print(f"Fout in worker: {result.stderr}")
-            return {"status": "error", "message": result.stderr}, 500
-            
-    except Exception as e:
-        return {"status": "error", "message": str(e)}, 500
+@app.route("/")
+def home():
+  return "Quant Worker Server is actief!"
+
+
+@app.route("/run-worker")
+def trigger_worker():
+  # Start de worker in een achtergrond-thread zodat de HTTP-response direct teruggaat
+  worker_thread = threading.Thread(target=run_quant_worker)
+  worker_thread.start()
+
+  return (
+      "Worker is gestart op de achtergrond en wordt verwerkt.",
+      200,
+  )
+
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+  app.run(host="0.0.0.0", port=10000)
