@@ -144,9 +144,17 @@ def push_to_github():
 
         subprocess.run(['git', 'commit', '-m', 'Auto-update trained ML models [skip ci]'], check=True)
         
-        # Push naar main branch
-        subprocess.run(['git', 'push', repo_url, 'HEAD:main'], check=True)
-        print('✅ Succesvol gepusht naar GitHub!')
+        # Bepaal automatisch de actuele branch naam (bijv. main of master)
+        branch_res = subprocess.run(['git', 'branch', '--show-current'], capture_output=True, text=True, check=True)
+        current_branch = branch_res.stdout.strip() or 'main'
+        
+        # Push naar de juiste branch
+        push_res = subprocess.run(['git', 'push', repo_url, f'HEAD:{current_branch}'], capture_output=True, text=True)
+        
+        if push_res.returncode == 0:
+            print('✅ Succesvol gepusht naar GitHub!')
+        else:
+            print(f'❌ Git push geweigerd. Foutmelding: {push_res.stderr}')
 
     except Exception as e:
         print(f'❌ Fout bij het pushen naar GitHub: {e}')
