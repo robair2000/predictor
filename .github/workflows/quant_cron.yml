@@ -1,13 +1,12 @@
-name: Automated Quant 24/7 Scan
+name: Automated Quant ML Training
 
 on:
   schedule:
-    # Draait automatisch elke 15 minuten
     - cron: '*/15 * * * *'
-  workflow_dispatch: Allows manual triggering from GitHub
+  workflow_dispatch:
 
 jobs:
-  run-quant:
+  run-ml:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -21,10 +20,8 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pandas numpy yfinance xgboost scikit-learn requests
+          pip install pandas numpy yfinance xgboost scikit-learn
 
-      - name: Run Quant Worker
-        env:
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+      - name: Run Background ML Trainer
         run: |
           python quant_worker.py
