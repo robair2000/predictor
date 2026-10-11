@@ -9,17 +9,68 @@ import xgboost as xgb
 import yfinance as yf
 from sklearn.model_selection import train_test_split
 
-# --- STREAMLIT PAGINA CONFIGURATIE ---
+# --- STREAMLIT PAGINA CONFIGURATIE & FLASHY STYLING ---
 st.set_page_config(
-    page_title='Institutional Core-Asset Quant & Confluence Dashboard',
+    page_title='Institutional Core-Asset Quant Terminal',
     page_icon='⚡',
     layout='wide',
 )
 
-st.title('⚡ Institutional Core-Asset Multi-Timeframe Quant Model')
+# Custom CSS voor een professionele, flashy Institutional Dark Theme lay-out
 st.markdown(
-    'Professioneel quant dashboard met **ADX Trendsterkte**, **Stochastic**, **OBV Volume**, '
-    '**Confluence Score**, **100% Feitelijke Backtesting** en **ATR Risk Management**.'
+    """
+    <style>
+        /* Main background & fonts */
+        .stApp {
+            background-color: #0b0f19;
+            color: #f8fafc;
+        }
+        
+        /* Sidebar styling */
+        [data-testid="stSidebar"] {
+            background-color: #111827;
+            border-right: 1px solid #1f2937;
+        }
+        
+        /* Metric cards styling */
+        [data-testid="stMetric"] {
+            background-color: #111827;
+            border: 1px solid #1f2937;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+        }
+        [data-testid="stMetricLabel"] {
+            color: #9ca3af !important;
+            font-size: 0.85rem !important;
+        }
+        [data-testid="stMetricValue"] {
+            color: #f3f4f6 !important;
+            font-size: 1.5rem !important;
+            font-weight: 700;
+        }
+        
+        /* Headers styling */
+        h1, h2, h3 {
+            color: #ffffff !important;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        
+        /* Dataframes */
+        [data-testid="stDataFrame"] {
+            border: 1px solid #1f2937;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+    </style>
+""",
+    unsafe_allow_html=True,
+)
+
+st.title('⚡ Institutional Core-Asset Multi-Timeframe Quant Terminal')
+st.markdown(
+    'High-Performance Quant Dashboard met **Fibonacci Retracements**, **ADX Trendsterkte**, '
+    '**Confluence Scoring** en een **Institutional Dark Mode**.'
 )
 
 # --- ASSET & TIJDSCHAAL CONFIGURATIE (Core Assets) ---
@@ -40,7 +91,7 @@ timeframe_options = {
     '1 Maand (1mo)': {'interval': '1mo', 'period': 'max', 'bars_per_day': 1, 'type': 'macro'},
 }
 
-st.sidebar.header('⚙️ Dashboard Instellingen')
+st.sidebar.header('⚙️ Terminal Controls')
 selected_asset_name = st.sidebar.selectbox('Selecteer Hoofdasset', list(asset_options.keys()))
 asset_info = asset_options[selected_asset_name]
 
@@ -52,7 +103,7 @@ n_estimators = st.sidebar.slider('XGBoost Bomen (n_estimators)', 50, 300, 150)
 max_depth = st.sidebar.slider('Maximale Boomdiepte (max_depth)', 3, 10, 4)
 
 st.sidebar.markdown('---')
-st.sidebar.subheader('🤖 Notificatie / Webhook (Optioneel)')
+st.sidebar.subheader('🤖 Notificatie / Webhook')
 webhook_url = st.sidebar.text_input('Discord/Telegram Webhook URL')
 send_alert = st.sidebar.button('Stuur Signaal Test')
 
@@ -101,21 +152,18 @@ def add_advanced_indicators(df, bars_per_day):
   df['VWAP'] = (typical_price * df['volume']).rolling(window=vwap_window).sum() / (df['volume'].rolling(window=vwap_window).sum() + 1e-8)
   df['VWAP_distance'] = (df['close'] - df['VWAP']) / (df['VWAP'] + 1e-8)
 
-  # Bollinger Bands
   sma_20 = df['close'].rolling(window=20).mean()
   std_20 = df['close'].rolling(window=20).std()
   upper_band = sma_20 + (std_20 * 2)
   lower_band = sma_20 - (std_20 * 2)
   df['BB_pct_b'] = (df['close'] - lower_band) / (upper_band - lower_band + 1e-8)
 
-  # ATR Volatiliteit
   high_low = df['high'] - df['low']
   high_close = np.abs(df['high'] - df['close'].shift())
   low_close = np.abs(df['low'] - df['close'].shift())
   true_range = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
   df['ATR'] = true_range.rolling(window=14).mean()
 
-  # Moving Averages & MACD
   df['SMA_20'] = sma_20
   df['SMA_50'] = df['close'].rolling(window=50).mean()
   df['EMA_9'] = df['close'].ewm(span=9, adjust=False).mean()
@@ -123,23 +171,19 @@ def add_advanced_indicators(df, bars_per_day):
   df['MACD'] = df['EMA_9'] - df['EMA_21']
   df['MACD_Signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
 
-  # RSI
   delta = df['close'].diff()
   gain = delta.where(delta > 0, 0.0)
   loss = -delta.where(delta < 0, 0.0)
   rs = gain.rolling(window=14).mean() / loss.rolling(window=14).mean()
   df['RSI'] = 100 - (100 / (1 + rs))
 
-  # Stochastic Oscillator
   low_14 = df['low'].rolling(window=14).min()
   high_14 = df['high'].rolling(window=14).max()
   df['Stoch_K'] = ((df['close'] - low_14) / (high_14 - low_14 + 1e-8)) * 100
   df['Stoch_D'] = df['Stoch_K'].rolling(window=3).mean()
 
-  # On-Balance Volume (OBV)
   df['OBV'] = (np.sign(df['close'].diff()) * df['volume']).fillna(0).cumsum()
 
-  # Average Directional Index (ADX)
   up_move = df['high'] - df['high'].shift()
   down_move = df['low'].shift() - df['low']
   plus_dm = np.where((up_move > down_move) & (up_move > 0), up_move, 0.0)
@@ -153,6 +197,15 @@ def add_advanced_indicators(df, bars_per_day):
   minus_di = 100 * (minus_dm_s / (tr_s + 1e-8))
   dx = 100 * np.abs(plus_di - minus_di) / (plus_di + minus_di + 1e-8)
   df['ADX'] = dx.ewm(alpha=1/14, adjust=False).mean()
+
+  rolling_high = df['high'].rolling(window=50).max()
+  rolling_low = df['low'].rolling(window=50).min()
+  diff_hl = rolling_high - rolling_low
+  
+  df['Fib_382'] = rolling_high - (diff_hl * 0.382)
+  df['Fib_500'] = rolling_high - (diff_hl * 0.500)
+  df['Fib_618'] = rolling_high - (diff_hl * 0.618)
+  df['Fib_618_distance'] = (df['close'] - df['Fib_618']) / (df['Fib_618'] + 1e-8)
 
   df['mtf_trend_bullish'] = (df['daily_close'] > df['daily_SMA50']).astype(int)
   return df
@@ -186,18 +239,22 @@ features = [
     'Stoch_D',
     'OBV',
     'ADX',
+    'Fib_382',
+    'Fib_500',
+    'Fib_618',
+    'Fib_618_distance',
     'fear_greed',
     'mtf_trend_bullish',
 ]
 
 
 # ==========================================
-# DEEL 1: MULTI-ASSET OVERZICHTSTABEL (Feitelijk)
+# DEEL 1: MULTI-ASSET OVERZICHTSTABEL
 # ==========================================
-st.subheader('🌐 Core Asset Real-Time Model Overzicht & Signalen')
+st.subheader('🌐 Core Asset Real-Time Model Grid')
 overview_data = []
 
-with st.spinner('Bezig met doorlichten van de core assets...'):
+with st.spinner('Laden van marktoverzicht...'):
   fng_val = fetch_crypto_fear_greed()
   for name, info in asset_options.items():
     df_temp = load_market_data(info['yf'], tf_info['interval'], tf_info['period'])
@@ -274,7 +331,10 @@ last_adx = float(df['ADX'].iloc[-1])
 last_macd = float(df['MACD'].iloc[-1])
 is_mtf_bullish = bool(df['mtf_trend_bullish'].iloc[-1])
 
-# Adaptieve logica: Micro (ML) vs Macro (Trend-Regime)
+fib_382 = float(df['Fib_382'].iloc[-1])
+fib_500 = float(df['Fib_500'].iloc[-1])
+fib_618 = float(df['Fib_618'].iloc[-1])
+
 if tf_info['type'] == 'micro' and len(df) > 40:
   df['Target'] = df['close'].shift(-1)
   df = df.dropna().reset_index(drop=True)
@@ -312,18 +372,20 @@ else:
   analysis_mode = 'Macro Trend-Regime & Momentum Analyse'
 
 confluence_points = 0
-if percentage_diff > 0 and is_mtf_bullish: confluence_points += 30
+if percentage_diff > 0 and is_mtf_bullish: confluence_points += 25
 if 40 <= last_rsi <= 65: confluence_points += 20
 if 20 <= last_stoch <= 80: confluence_points += 20
 if last_adx > 25: confluence_points += 15
-if last_macd > 0: confluence_points += 15
+if last_macd > 0: confluence_points += 10
+if abs(current_price - fib_618) / current_price < 0.015: confluence_points += 10
+
 confluence_score = min(100, max(10, confluence_points if percentage_diff > 0 else 100 - confluence_points))
 
 brussels_tz = ZoneInfo('Europe/Brussels')
 laatste_update = datetime.now(brussels_tz).strftime('%H:%M:%S (%d-%m-%Y)')
 
 st.subheader(f"{asset_info['icon']} Geselecteerde Hoofdasset: {selected_asset_name} ({selected_tf_name})")
-st.caption(f'Actieve Analyse-Methode: **{analysis_mode}** | ADX Trendsterkte: **{last_adx:.1f}** | Stochastic: **{last_stoch:.1f}**')
+st.caption(f'Actieve Methode: **{analysis_mode}** | ADX: **{last_adx:.1f}** | Fib 0.618: **${fib_618:,.3f}**')
 
 col1, col2, col3, col4, col5 = st.columns(5)
 col1.metric('Huidige Koers', f'${current_price:,.3f}')
@@ -331,6 +393,14 @@ col2.metric('Model Score ($R^2$)', f'{score:.2f}' if tf_info['type'] == 'micro' 
 col3.metric('Directional Win-Rate', f'{directional_acc:.1f}%')
 col4.metric('Confluence Score', f'{confluence_score}%')
 col5.metric('Laatste Call (Brussel)', laatste_update)
+
+st.markdown('---')
+
+st.subheader('📐 Fibonacci Retracement Niveaus')
+f_col1, f_col2, f_col3 = st.columns(3)
+f_col1.metric('Fibonacci 38.2%', f'${fib_382:,.3f}')
+f_col2.metric('Fibonacci 50.0%', f'${fib_500:,.3f}')
+f_col3.metric('Fibonacci 61.8% (Golden Pocket)', f'${fib_618:,.3f}')
 
 st.markdown('---')
 
@@ -363,11 +433,10 @@ st.markdown('---')
 
 
 # ==========================================
-# DEEL 3: 100% FEITELIJKE BACKTEST & RATIOS
+# DEEL 3: BACKTEST PERFORMANCE & RATIOS
 # ==========================================
-st.subheader('📈 Geavanceerde Feitelijke Backtest prestaties (Testset)')
+st.subheader('📈 Feitelijke Backtest Prestaties (Testset)')
 
-# Bereken feitelijke strategie rendementen op basis van echte koersveranderingen in de testset
 min_len = min(len(test_closes), len(test_actuals), len(pred_direction))
 if min_len > 2:
   t_closes = test_closes[-min_len:]
@@ -390,22 +459,24 @@ sortino_ratio = (daily_strat_ret.mean() / (downside_std + 1e-8)) * np.sqrt(252)
 max_drawdown = (np.maximum.accumulate(1 + strat_cum) - (1 + strat_cum)).max() * 100
 
 col_r1, col_r2, col_r3 = st.columns(3)
-col_r1.metric('Sharpe Ratio (Risico-rendement)', f'{sharpe_ratio:.2f}')
-col_r2.metric('Sortino Ratio (Downside)', f'{sortino_ratio:.2f}')
-col_r3.metric('Maximum Drawdown', f'-{max_drawdown:.2f}%')
+col_r1.metric('Sharpe Ratio', f'{sharpe_ratio:.2f}')
+col_r2.metric('Sortino Ratio', f'{sortino_ratio:.2f}')
+col_r3.metric('Max Drawdown', f'-{max_drawdown:.2f}%')
 
 fig_bt, ax_bt = plt.subplots(figsize=(10, 3))
-ax_bt.plot(strat_cum * 100, label='Feitelijke Quant Strategie (%)', color='#00CC66', lw=2)
-ax_bt.plot(bh_cum * 100, label='Buy & Hold Benchmark (%)', color='#888888', ls='--', lw=1.5)
-ax_bt.set_ylabel('Rendement (%)')
-ax_bt.legend(loc='upper left')
-ax_bt.grid(True, alpha=0.3)
+fig_bt.patch.set_facecolor('#0b0f19')
+ax_bt.set_facecolor('#111827')
+ax_bt.plot(strat_cum * 100, label='Quant Strategie (%)', color='#00CC66', lw=2)
+ax_bt.plot(bh_cum * 100, label='Benchmark (%)', color='#9ca3af', ls='--', lw=1.5)
+ax_bt.set_ylabel('Rendement (%)', color='#f3f4f6')
+ax_bt.tick_params(colors='#f3f4f6')
+ax_bt.legend(loc='upper left', facecolor='#111827', edgecolor='none', labelcolor='#f3f4f6')
+ax_bt.grid(True, color='#1f2937', alpha=0.5)
 st.pyplot(fig_bt)
 plt.close(fig_bt)
 
 st.markdown('---')
 
-# --- SHAP & FEATURE IMPORTANCE ---
 if tf_info['type'] == 'micro' and len(df) > 40:
   col_shap, col_feat = st.columns(2)
 
@@ -416,6 +487,8 @@ if tf_info['type'] == 'micro' and len(df) > 40:
       explainer = shap.TreeExplainer(model)
       shap_vals = explainer(X.tail(1))
       fig_s, ax_s = plt.subplots(figsize=(6, 3))
+      fig_s.patch.set_facecolor('#0b0f19')
+      ax_s.set_facecolor('#111827')
       shap.plots.waterfall(shap_vals[0], max_display=6, show=False)
       st.pyplot(fig_s)
       plt.close(fig_s)
@@ -426,10 +499,13 @@ if tf_info['type'] == 'micro' and len(df) > 40:
     st.subheader('📊 Belangrijkste Features')
     importances = pd.Series(model.feature_importances_, index=features).sort_values(ascending=True)
     fig_f, ax_f = plt.subplots(figsize=(6, 3))
-    importances.tail(6).plot(kind='barh', ax=ax_f, color='#1f77b4')
-    ax_f.grid(True, alpha=0.3)
+    fig_f.patch.set_facecolor('#0b0f19')
+    ax_f.set_facecolor('#111827')
+    importances.tail(6).plot(kind='barh', ax=ax_f, color='#3b82f6')
+    ax_f.tick_params(colors='#f3f4f6')
+    ax_f.grid(True, color='#1f2937', alpha=0.5)
     st.pyplot(fig_f)
     plt.close(fig_f)
 else:
   st.subheader('📊 Macro Technische Indicatoren & Momentum')
-  st.info(f'Op de gekozen macro-tijdschaal ({selected_tf_name}) analyseert het model de trendregimes via SMA20/SMA50, RSI ({last_rsi:.1f}), Stochastic ({last_stoch:.1f}) en ADX ({last_adx:.1f}).')
+  st.info(f'Macro-tijdschaal ({selected_tf_name}) analyse via SMA20/SMA50, RSI ({last_rsi:.1f}), Stochastic ({last_stoch:.1f}), ADX ({last_adx:.1f}) en Fibonacci (${fib_618:,.3f}).')
