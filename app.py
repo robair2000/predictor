@@ -156,36 +156,3 @@ def fetch_crypto_fear_greed():
   try:
     res = requests.get('https://api.alternative.me/fng/?limit=1', timeout=5).json()
     return float(res['data'][0]['value'])
-  except Exception:
-    return 50.0
-
-
-features = [
-    'close',
-    'open',
-    'high',
-    'low',
-    'volume',
-    'VWAP_distance',
-    'BB_pct_b',
-    'ATR',
-    'SMA_20',
-    'EMA_9',
-    'EMA_21',
-    'MACD',
-    'MACD_Signal',
-    'RSI',
-    'fear_greed',
-    'mtf_trend_bullish',
-]
-
-
-# ==========================================
-# DEEL 1: MULTI-ASSET OVERZICHTSTABEL (GRID)
-# ==========================================
-st.subheader('🌐 Multi-Asset Real-Time Overzicht & Signalen')
-overview_data = []
-
-with st.spinner('Bezig met doorlichten van alle assets in de suite...'):
-  fng_val = fetch_crypto_fear_greed()
-  for name, info in
