@@ -1,6 +1,7 @@
+import os
 import threading
 from flask import Flask
-from quant_worker import main as run_quant_worker  # Pas dit aan als je import anders heet
+from quant_worker import main as run_quant_worker
 
 app = Flask(__name__)
 
@@ -12,10 +13,9 @@ def home():
 
 @app.route("/run-worker")
 def trigger_worker():
-  # Start de worker in een achtergrond-thread zodat de HTTP-response direct teruggaat
+  # Start de worker op de achtergrond zodat de HTTP-respons direct teruggaat
   worker_thread = threading.Thread(target=run_quant_worker)
   worker_thread.start()
-
   return (
       "Worker is gestart op de achtergrond en wordt verwerkt.",
       200,
@@ -23,4 +23,6 @@ def trigger_worker():
 
 
 if __name__ == "__main__":
-  app.run(host="0.0.0.0", port=10000)
+  # Haal de poort op die Render toewijst, of val terug op poort 10000 voor lokaal testen
+  port = int(os.environ.get("PORT", 10000))
+  app.run(host="0.0.0.0", port=port)
