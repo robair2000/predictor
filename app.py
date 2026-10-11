@@ -127,4 +127,92 @@ def add_advanced_indicators(df, bars_per_day):
   std_20 = df['close'].rolling(window=20).std()
   upper_band = sma_20 + (std_20 * 2)
   lower_band = sma_20 - (std_20 * 2)
-  df['BB_pct_b'] = (df['close'] - lower_band) / (upper_band - lower_band + 1e
+  df['BB_pct_b'] = (df['close'] - lower_band) / (upper_band - lower_band + 1e-8)
+
+  high_low = df['high'] - df['low']
+  high_close = np.abs(df['high'] - df['close'].shift())
+  low_close = np.abs(df['low'] - df['close'].shift())
+  true_range = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+  df['ATR'] = true_range.rolling(window=14).mean()
+
+  df['SMA_20'] = sma_20
+  df['EMA_9'] = df['close'].ewm(span=9, adjust=False).mean()
+  df['EMA_21'] = df['close'].ewm(span=21, adjust=False).mean()
+  df['MACD'] = df['EMA_9'] - df['EMA_21']
+  df['MACD_Signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
+
+  delta = df['close'].diff()
+  gain = delta.where(delta > 0, 0.0)
+  loss = -delta.where(delta < 0, 0.0)
+  rs = gain.rolling(window=14).mean() / loss.rolling(window=14).mean()
+  df['RSI'] = 100 - (100 / (1 + rs))
+
+  df['mtf_trend_bullish'] = (df['daily_close'] > df['daily_SMA50']).astype(int)
+  return df
+
+
+@st.cache_data(ttl=300)
+def fetch_crypto_fear_greed():
+  try:
+    res = requests.get('https://api.alternative.me/fng/?limit=1', timeout=5).json()
+    return float(res['data'][0]['value'])
+  except Exception:
+    return 50.0
+
+
+features = [
+    'close',
+    'open',
+    'high',
+    'low',
+    'volume',
+    'VWAP_distance',
+    'BB_pct_b',
+    'ATR',
+    'SMA_20',
+    'EMA_9',
+    'EMA_21',
+    'MACD',
+    'MACD_Signal',
+    'RSI',
+    'fear_greed',
+    'mtf_trend_bullish',
+]
+
+
+# ==========================================
+# DEEL 1: MULTI-ASSET OVERZICHTSTABEL (GRID)
+# ==========================================
+st.subheader('🌐 Multi-Asset Real-Time Overzicht & Signalen')
+overview_data = []
+
+with st.spinner('Bezig met doorlichten van alle assets in de suite...'):
+  fng_val = fetch_crypto_fear_greed()
+  for name, info in asset_options.items():
+    df_temp = load_market_data(info['yf'], tf_info['interval'], tf_info['period'])
+    if df_temp is not None and len(df_temp) > 30:
+      df_temp = add_advanced_indicators(df_temp, tf_info['bars_per_day'])
+      df_temp['fear_greed'] = fng_val
+      df_temp['Target'] = df_temp['close'].shift(-1)
+      df_temp = df_temp.dropna().reset_index(drop=True)
+      
+      X_t = df_temp[features]
+      y_t = df_temp['Target']
+      X_tr, X_te, y_tr, y_te = train_test_split(X_t, y_t, test_size=0.2, shuffle=False)
+      
+      m_temp = xgb.XGBRegressor(n_estimators=100, max_depth=3, random_state=42)
+      m_temp.fit(X_tr, y_tr)
+      
+      live_p = fetch_realtime_binance_price(info['binance'])
+      curr_p = live_p if live_p else float(df_temp['close'].iloc[-1])
+      pred_p = m_temp.predict(X_t.tail(1))[0]
+      pct_d = ((pred_p - curr_p) / curr_p) * 100
+      is_bull = bool(df_temp['mtf_trend_bullish'].iloc[-1])
+      
+      t_preds = m_temp.predict(X_te)
+      dir_acc = np.mean(np.sign(t_preds - X_te['close'].values) == np.sign(y_te.values - X_te['close'].values)) * 100
+      
+      signal = '🚀 STERK LONG' if pct_d > 0 and is_bull else ('⚠️ CONTRA-LONG' if pct_d > 0 else '📉 SHORT')
+      
+      overview_data.append({
+          'Asset': f"{info['icon']} {name
