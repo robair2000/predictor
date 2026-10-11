@@ -262,4 +262,121 @@ test_preds = model.predict(X_test)
 test_actuals = y_test.values
 test_closes = X_test['close'].values
 pred_direction = np.sign(test_preds - test_closes)
-actual_direction = np.
+actual_direction = np.sign(test_actuals - test_closes)
+directional_acc = np.mean(pred_direction == actual_direction) * 100
+
+last_rsi = float(df['RSI'].iloc[-1])
+last_macd = float(df['MACD'].iloc[-1])
+is_mtf_bullish = bool(df['mtf_trend_bullish'].iloc[-1])
+confluence_points = 0
+if pred_direction[-1] > 0 and is_mtf_bullish: confluence_points += 40
+if 40 <= last_rsi <= 65: confluence_points += 30
+if last_macd > 0: confluence_points += 30
+confluence_score = min(100, max(10, confluence_points if pred_direction[-1] > 0 else 100 - confluence_points))
+
+realtime_price = fetch_realtime_binance_price(asset_info['binance'])
+current_price = realtime_price if realtime_price else float(df['close'].iloc[-1])
+current_atr = float(df['ATR'].iloc[-1])
+
+brussels_tz = ZoneInfo('Europe/Brussels')
+laatste_update = datetime.now(brussels_tz).strftime('%H:%M:%S (%d-%m-%Y)')
+
+st.subheader(f"{asset_info['icon']} Geselecteerde Hoofdasset: {selected_asset_name} ({selected_tf_name})")
+
+col1, col2, col3, col4, col5 = st.columns(5)
+col1.metric('Huidige Koers', f'${current_price:,.3f}')
+col2.metric('Model Score ($R^2$)', f'{score:.2f}')
+col3.metric('Directional Win-Rate', f'{directional_acc:.1f}%')
+col4.metric('Confluence Score', f'{confluence_score}%')
+col5.metric('Laatste Call (Brussel)', laatste_update)
+
+st.markdown('---')
+
+latest_data = X.iloc[-1].values.reshape(1, -1)
+predicted_price = model.predict(latest_data)[0]
+price_diff = predicted_price - current_price
+percentage_diff = (price_diff / current_price) * 100
+
+stop_loss = current_price - (1.5 * current_atr) if price_diff > 0 else current_price + (1.5 * current_atr)
+take_profit = current_price + (2.5 * current_atr) if price_diff > 0 else current_price - (2.5 * current_atr)
+
+st.subheader(f'🔮 Voorspelling & Risk Management ({selected_tf_name} Candle)')
+
+col_a, col_b, col_c = st.columns(3)
+col_a.metric(f'Voorspelde Prijs', f'${predicted_price:,.3f}', delta=f'{percentage_diff:+.3f}%')
+col_b.metric('Aanbevolen Stop-Loss', f'${stop_loss:,.3f}')
+col_c.metric('Aanbevolen Take-Profit', f'${take_profit:,.3f}')
+
+if predicted_price > current_price and is_mtf_bullish:
+  st.success(f'**STERK LONG SETUP 🚀** — Model verwacht stijging en Confluence is hoog ({confluence_score}%).')
+elif predicted_price > current_price and not is_mtf_bullish:
+  st.warning(f'**CONTRA-TREND LONG ⚠️** — Model voorspelt stijging, maar dagtrend is bearish.')
+else:
+  st.error(f'**SHORT SETUP 📉** — Model verwacht daling voor de komende candle.')
+
+if send_alert and webhook_url:
+  try:
+    payload = {'content': f"{asset_info['icon']} **{selected_asset_name} Alert** \nKoers: ${current_price:,.3f}\nDoel: ${predicted_price:,.3f} ({percentage_diff:+.3f}%)"}
+    requests.post(webhook_url, json=payload, timeout=5)
+    st.sidebar.success('Signaal verzonden!')
+  except Exception as e:
+    st.sidebar.error(f'Fout: {e}')
+
+st.markdown('---')
+
+
+# ==========================================
+# DEEL 3: BACKTEST PERFORMANCE & RATIOS
+# ==========================================
+st.subheader('📈 Geavanceerde Backtest prestaties & Ratios (Testset)')
+
+strategy_returns = np.where(pred_direction > 0, (test_actuals - test_closes) / test_closes, - (test_actuals - test_closes) / test_closes)
+strat_cum = np.cumprod(1 + strategy_returns) - 1
+bh_cum = np.cumprod(1 + (test_actuals - test_closes) / test_closes) - 1
+
+daily_strat_ret = pd.Series(strategy_returns)
+sharpe_ratio = (daily_strat_ret.mean() / (daily_strat_ret.std() + 1e-8)) * np.sqrt(252)
+downside_std = daily_strat_ret[daily_strat_ret < 0].std()
+sortino_ratio = (daily_strat_ret.mean() / (downside_std + 1e-8)) * np.sqrt(252)
+max_drawdown = (np.maximum.accumulate(1 + strat_cum) - (1 + strat_cum)).max() * 100
+
+col_r1, col_r2, col_r3 = st.columns(3)
+col_r1.metric('Sharpe Ratio (Risico-rendement)', f'{sharpe_ratio:.2f}')
+col_r2.metric('Sortino Ratio (Downside)', f'{sortino_ratio:.2f}')
+col_r3.metric('Maximum Drawdown', f'-{max_drawdown:.2f}%')
+
+fig_bt, ax_bt = plt.subplots(figsize=(10, 3))
+ax_bt.plot(strat_cum * 100, label='Quant Strategie Rendement (%)', color='#00CC66', lw=2)
+ax_bt.plot(bh_cum * 100, label='Buy & Hold Benchmark (%)', color='#888888', ls='--', lw=1.5)
+ax_bt.set_ylabel('Rendement (%)')
+ax_bt.legend(loc='upper left')
+ax_bt.grid(True, alpha=0.3)
+st.pyplot(fig_bt)
+plt.close(fig_bt)
+
+st.markdown('---')
+
+# --- SHAP & FEATURE IMPORTANCE ---
+col_shap, col_feat = st.columns(2)
+
+with col_shap:
+  st.subheader('🔍 SHAP Explainability')
+  try:
+    import shap
+    explainer = shap.TreeExplainer(model)
+    shap_vals = explainer(X.tail(1))
+    fig_s, ax_s = plt.subplots(figsize=(6, 3))
+    shap.plots.waterfall(shap_vals[0], max_display=6, show=False)
+    st.pyplot(fig_s)
+    plt.close(fig_s)
+  except Exception:
+    st.info('SHAP-uitleg tijdelijk niet beschikbaar.')
+
+with col_feat:
+  st.subheader('📊 Belangrijkste Features')
+  importances = pd.Series(model.feature_importances_, index=features).sort_values(ascending=True)
+  fig_f, ax_f = plt.subplots(figsize=(6, 3))
+  importances.tail(6).plot(kind='barh', ax=ax_f, color='#1f77b4')
+  ax_f.grid(True, alpha=0.3)
+  st.pyplot(fig_f)
+  plt.close(fig_f)
