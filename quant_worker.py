@@ -134,7 +134,7 @@ def push_to_github():
     try:
         print('🔄 Bezig met pushen van model-states naar GitHub...')
         # PAS HIERONDER JE EIGEN GITHUB GEBRUIKERSNAAM EN REPO-NAAM AAN!
-        repo_url = f'https://{github_token}@github.com/JOUW_GITHUB_GEBRUIKERSNAAM/JOUW_REPO_NAAM.git'
+        repo_url = f'https://{github_token}@github.com/robair2000/predictor.git'
 
         subprocess.run(['git', 'config', '--global', 'user.email', 'render-worker@bot.com'], check=True)
         subprocess.run(['git', 'config', '--global', 'user.name', 'Render Quant Bot'], check=True)
