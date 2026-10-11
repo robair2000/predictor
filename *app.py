@@ -1,5 +1,5 @@
 import streamlit as st
-import pandas as pd
+import pandas as df_lib
 import numpy as np
 import yfinance as yf
 import xgboost as xgb
@@ -12,15 +12,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Custom Styling (Dark Mode Quant Theme)
-st.markdown("""
-    <style>
-    .main { background-color: #0e1117; color: #ffffff; }
-    .stMetric { background-color: #161b22; padding: 15px; border-radius: 8px; border: 1px solid #30363d; }
-    </style>
-""", unsafe_allow_html=True)
-
-st.title("⚡ Autonomous Crypto Quant Dashboard")
+st.title("⚡ RV Predictor")
 st.markdown("*Real-time machine learning voorspellingen gevoed door een 24/7 achtergrond-worker.*")
 
 # Sidebar: Asset keuze & Tijdinterval (Timescales)
@@ -50,12 +42,12 @@ def load_dashboard_data(ticker, interval, period):
         df = yf.download(ticker, period=period, interval=interval, progress=False)
         if df is None or df.empty:
             return None
-        if isinstance(df.columns, pd.MultiIndex):
+        if isinstance(df.columns, df_lib.MultiIndex):
             df.columns = df.columns.get_level_values(0)
         df = df.reset_index()
         date_col = 'Datetime' if 'Datetime' in df.columns else 'Date'
         df = df.rename(columns={date_col: 'Date', 'Open': 'open', 'High': 'high', 'Low': 'low', 'Close': 'close', 'Volume': 'volume'})
-        df['Date'] = pd.to_datetime(df['Date'])
+        df['Date'] = df_lib.to_datetime(df['Date'])
         df = df.sort_values('Date').dropna(subset=['close']).reset_index(drop=True)
         
         # Technische indicatoren
@@ -71,7 +63,7 @@ def load_dashboard_data(ticker, interval, period):
         high_low = df['high'] - df['low']
         high_close = np.abs(df['high'] - df['close'].shift())
         low_close = np.abs(df['low'] - df['close'].shift())
-        true_range = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+        true_range = df_lib.concat([high_low, high_close, low_close], axis=1).max(axis=1)
         df['ATR'] = true_range.rolling(window=14).mean()
         
         df['SMA_20'] = sma_20
@@ -98,8 +90,8 @@ def load_dashboard_data(ticker, interval, period):
         down_move = df['low'].shift() - df['low']
         plus_dm = np.where((up_move > down_move) & (up_move > 0), up_move, 0.0)
         minus_dm = np.where((down_move > up_move) & (down_move > 0), down_move, 0.0)
-        plus_dm_s = pd.Series(plus_dm, index=df.index).ewm(alpha=1/14, adjust=False).mean()
-        minus_dm_s = pd.Series(minus_dm, index=df.index).ewm(alpha=1/14, adjust=False).mean()
+        plus_dm_s = df_lib.Series(plus_dm, index=df.index).ewm(alpha=1/14, adjust=False).mean()
+        minus_dm_s = df_lib.Series(minus_dm, index=df.index).ewm(alpha=1/14, adjust=False).mean()
         tr_s = true_range.ewm(alpha=1/14, adjust=False).mean()
         plus_di = 100 * (plus_dm_s / (tr_s + 1e-8))
         minus_di = 100 * (minus_dm_s / (tr_s + 1e-8))
@@ -128,7 +120,8 @@ features = [
     'close', 'open', 'high', 'low', 'volume', 'VWAP_distance', 'BB_pct_b', 
     'ATR', 'SMA_20', 'EMA_9', 'EMA_21', 'MACD', 'MACD_Signal', 'RSI', 
     'Stoch_K', 'Stoch_D', 'OBV', 'ADX', 'Fib_382', 'Fib_500', 'Fib_618', 
-    'Fib_618_distance', 'fear_greed', 'mtf_trend_bullish'
+    'Fib_618_distance', 'fear_greed', 'mtf_trend_bullish',
+    'RVOL', 'upper_wick', 'lower_wick', 'RSI_momentum', 'MACD_hist_momentum'
 ]
 
 # Laad de data op basis van gekozen parameters
@@ -147,7 +140,7 @@ if df is not None and not df.empty:
         predicted_price = model.predict(latest_features)[0]
         pct_diff = ((predicted_price - current_price) / current_price) * 100
         
-        # Metrics weergave
+        # Schone weergave zonder donkere achtergrondblokken
         col1, col2, col3 = st.columns(3)
         col1.metric("Huidige Koers", f"${current_price:,.2f}")
         col2.metric("XGBoost Voorspelling (Bg-Model)", f"${predicted_price:,.2f}", delta=f"{pct_diff:+.2f}%")
