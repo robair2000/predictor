@@ -120,7 +120,7 @@ features = [
 
 
 def push_to_github():
-    """Pusht de bijgewerkte model- en state-bestanden automatisch naar GitHub."""
+    """Pusht de bijgewerkte model- en state-bestanden automatisch naar GitHub met force."""
     github_token = os.environ.get('GITHUB_TOKEN')
     if not github_token:
         print('⚠️ Geen GITHUB_TOKEN gevonden in environment. Kan niet pushen naar GitHub.')
@@ -148,12 +148,8 @@ def push_to_github():
         branch_res = subprocess.run(['git', 'branch', '--show-current'], capture_output=True, text=True, check=True)
         current_branch = branch_res.stdout.strip() or 'main'
         
-        # Haal eerst de remote wijzigingen op en merge ze automatisch
-        subprocess.run(['git', 'fetch', repo_url, current_branch], check=True)
-        subprocess.run(['git', 'merge', f'FETCH_HEAD', '--no-edit', '-X', 'theirs'], check=True)
-        
-        # Push direct naar GitHub
-        push_res = subprocess.run(['git', 'push', repo_url, f'HEAD:{current_branch}'], capture_output=True, text=True)
+        # Forceer de push naar GitHub om elk conflict te omzeilen
+        push_res = subprocess.run(['git', 'push', '--force', repo_url, f'HEAD:{current_branch}'], capture_output=True, text=True)
         
         if push_res.returncode == 0:
             print('✅ Succesvol gepusht naar GitHub!')
