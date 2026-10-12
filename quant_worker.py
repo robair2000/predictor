@@ -11,7 +11,7 @@ import xgboost as xgb
 import lightgbm as lgb
 from catboost import CatBoostRegressor
 
-assets = ['BTC', 'ETH', 'LINK', 'AAVE']
+assets = ['BTC', 'ETH', 'LINK']
 
 timeframes = {
     '15m': {'interval': '15m', 'period': '59d', 'horizon': 1},
