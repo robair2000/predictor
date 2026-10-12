@@ -2,27 +2,21 @@ import json
 import os
 import subprocess
 import time
-from datetime import datetime, timedelta
 import numpy as np
 import pandas as pd
-import ccxt
+import yfinance as yf
 import xgboost as xgb
 import lightgbm as lgb
 from catboost import CatBoostRegressor
 
-# Initialiseer Binance via CCXT
-exchange = ccxt.binance({
-    'enableRateLimit': True,
-    'options': {'defaultType': 'spot'}
-})
-
 assets = ['BTC', 'ETH', 'LINK', 'AAVE']
 
+# Timescales geoptimaliseerd met yfinance parameters en 4h resampling
 timeframes = {
-    '15m': {'ccxt_tf': '15m', 'horizon': 1},
-    '1h': {'ccxt_tf': '1h', 'horizon': 1},
-    '4h': {'ccxt_tf': '4h', 'horizon': 1},
-    '1d': {'ccxt_tf': '1d', 'horizon': 1},
+    '15m': {'interval': '15m', 'period': '59d', 'horizon': 1},
+    '1h': {'interval': '1h', 'period': '730d', 'horizon': 1},
+    '4h': {'interval': '1h', 'period': '730d', 'resample': '4h', 'horizon': 1},
+    '1d': {'interval': '1d', 'period': 'max', 'horizon': 1},
 }
 
 def load_or_init_state(state_file):
@@ -63,31 +57,43 @@ features = [
     'SMA_20', 'EMA_9', 'EMA_21', 'MACD', 'RSI', 'ATR'
 ]
 
-def fetch_two_years_data(symbol, timeframe):
-    since = exchange.parse8601((datetime.utcnow() - timedelta(days=730)).isoformat())
-    all_bars = []
-    current_since = since
+def fetch_data_safely(ticker, tf_info):
+    """Haalt historische data op via yfinance met automatische resampling voor 4h."""
+    try:
+        df = yf.download(ticker, period=tf_info['period'], interval=tf_info['interval'], progress=False)
+        if df is None or df.empty:
+            return pd.DataFrame()
 
-    while True:
-        try:
-            bars = exchange.fetch_ohlcv(symbol, timeframe=timeframe, since=current_since, limit=1000)
-            if not bars:
-                break
-            all_bars.extend(bars)
-            current_since = bars[-1][0] + 1
-            if bars[-1][0] >= exchange.milliseconds() - (60 * 1000):
-                break
-            time.sleep(exchange.rateLimit / 1000)
-        except Exception:
-            break
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
 
-    if not all_bars:
+        df = df.reset_index()
+        date_col = 'Datetime' if 'Datetime' in df.columns else 'Date'
+        df = df.rename(columns={
+            date_col: 'Date',
+            'Open': 'open',
+            'High': 'high',
+            'Low': 'low',
+            'Close': 'close',
+            'Volume': 'volume'
+        })
+        df['Date'] = pd.to_datetime(df['Date'])
+        df.set_index('Date', inplace=True)
+
+        # Resample naar 4h indien aangegeven
+        if tf_info.get('resample') == '4h':
+            df = df.resample('4H').agg({
+                'open': 'first',
+                'high': 'max',
+                'low': 'min',
+                'close': 'last',
+                'volume': 'sum'
+            })
+            df.dropna(inplace=True)
+
+        return df.reset_index(drop=True)
+    except Exception:
         return pd.DataFrame()
-
-    df = pd.DataFrame(all_bars, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-    df.set_index('timestamp', inplace=True)
-    return df
 
 def push_to_github():
     github_token = os.environ.get('GITHUB_TOKEN')
@@ -103,7 +109,7 @@ def push_to_github():
         if not status.stdout.strip():
             return
 
-        subprocess.run(['git', 'commit', '-m', 'Auto-update Ensemble models [skip ci]'], check=True)
+        subprocess.run(['git', 'commit', '-m', 'Auto-update yfinance Ensemble models [skip ci]'], check=True)
         branch_res = subprocess.run(['git', 'branch', '--show-current'], capture_output=True, text=True, check=True)
         current_branch = branch_res.stdout.strip() or 'main'
         subprocess.run(['git', 'push', '--force', repo_url, f'HEAD:{current_branch}'], capture_output=True, text=True)
@@ -112,12 +118,12 @@ def push_to_github():
 
 def main():
     for asset in assets:
-        symbol = f'{asset}/USDT'
+        ticker = f'{asset}-USD'
         for tf_name, tf_info in timeframes.items():
             try:
                 state_file = f'model_state_{asset.lower()}_{tf_name}.json'
 
-                df = fetch_two_years_data(symbol, tf_info['ccxt_tf'])
+                df = fetch_data_safely(ticker, tf_info)
                 if df is None or df.empty:
                     continue
 
