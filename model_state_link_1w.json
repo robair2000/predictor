@@ -1,13 +1,13 @@
 {
-    "learning_rate": 0.010000000000000005,
+    "learning_rate": 0.01,
     "max_depth": 5,
     "n_estimators": 100,
     "previous_learning_rate": 0.045000000000000005,
     "previous_max_depth": 5,
-    "baseline_error": 0.13739645002539902,
+    "baseline_error": 3.960602512620426e-09,
     "last_prediction": 12.876000408318513,
     "search_direction": -1,
-    "lookback_window": 170,
+    "lookback_window": 180,
     "model_weights": {
         "xgb": 0.046410305301582355,
         "lgb": 0.03384670703842795,
