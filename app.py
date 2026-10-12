@@ -41,13 +41,13 @@ interval_code = interval_info['code']
 
 @st.cache_data(ttl=300)
 def load_dashboard_data(ticker, tf_info):
-    """Haalt 1h data op via yfinance en resample deze naar 4h (of andere tijdsbestekken)."""
+    """Haalt de basisdata op en resamplet 1h data naar 4h candles indien gevraagd."""
     try:
+        # tf_info['interval'] is hier '1h' voor de 4h optie
         df = yf.download(ticker, period=tf_info['period'], interval=tf_info['interval'], progress=False)
         if df is None or df.empty:
             return None
             
-        # Handelt moderne multi-index kolommen van yfinance af
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
             
@@ -64,7 +64,7 @@ def load_dashboard_data(ticker, tf_info):
         df['Date'] = pd.to_datetime(df['Date'])
         df.set_index('Date', inplace=True)
         
-        # Resample 1h data naar 4h candles
+        # Converteer 1h data naar 4h candles
         if tf_info.get('resample') == '4h':
             df = df.resample('4H').agg({
                 'open': 'first',
