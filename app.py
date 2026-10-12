@@ -30,7 +30,7 @@ interval_options = {
     '4 Uur': {'interval': '1h', 'period': '730d', 'resample': '4h', 'code': '4h'},
     '1 Dag': {'interval': '1d', 'period': 'max', 'code': '1d'}
 }
-}
+
 
 selected_asset_name = st.sidebar.selectbox("Selecteer Asset", list(asset_options.keys()))
 selected_interval_name = st.sidebar.selectbox("Selecteer Tijdinterval", list(interval_options.keys()))
