@@ -12,7 +12,7 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("🔮 RV Multi-Timeframe Ensemble Predictor")
+st.title("🔮 RV Predictor")
 st.markdown("*Real-time institutionele ensemble voorspellingen (XGBoost + LightGBM + CatBoost) gevoed door yfinance data.*")
 
 # Sidebar: Asset keuze & Tijdinterval (Timescales)
