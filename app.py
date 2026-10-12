@@ -8,11 +8,11 @@ import yfinance as yf
 # Pagina configuratie
 st.set_page_config(
     page_title="RV Predictor",
-    page_icon="⚡",
+    page_icon="🔮",
     layout="wide"
 )
 
-st.title("⚡ RV Multi-Timeframe Ensemble Predictor")
+st.title("🔮 RV Multi-Timeframe Ensemble Predictor")
 st.markdown("*Real-time institutionele ensemble voorspellingen (XGBoost + LightGBM + CatBoost) gevoed door yfinance data.*")
 
 # Sidebar: Asset keuze & Tijdinterval (Timescales)
