@@ -13,11 +13,13 @@ from catboost import CatBoostRegressor
 
 assets = ['BTC', 'ETH', 'LINK', 'AAVE']
 
+# Tijdbestekken zonder 4h, aangevuld met 1 week (1wk) en 1 maand (1mo)
 timeframes = {
     '15m': {'interval': '15m', 'period': '59d', 'horizon': 1},
     '1h': {'interval': '1h', 'period': '730d', 'horizon': 1},
-    '4h': {'interval': '1h', 'period': '730d', 'resample': '4h', 'horizon': 1},
     '1d': {'interval': '1d', 'period': 'max', 'horizon': 1},
+    '1w': {'interval': '1wk', 'period': 'max', 'horizon': 1},
+    '1m': {'interval': '1mo', 'period': 'max', 'horizon': 1},
 }
 
 def load_or_init_state(state_file):
@@ -80,16 +82,6 @@ def fetch_data_safely(ticker, tf_info):
         df['Date'] = pd.to_datetime(df['Date'])
         df.set_index('Date', inplace=True)
 
-        if tf_info.get('resample') == '4h':
-            df = df.resample('4H').agg({
-                'open': 'first',
-                'high': 'max',
-                'low': 'min',
-                'close': 'last',
-                'volume': 'sum'
-            })
-            df.dropna(inplace=True)
-
         return df.reset_index(drop=True)
     except Exception:
         return pd.DataFrame()
@@ -124,7 +116,7 @@ def main():
                 state_file = f'model_state_{asset.lower()}_{tf_name}.json'
 
                 df = fetch_data_safely(ticker, tf_info)
-                if df is None or df.empty:
+                if df is None or df.empty or len(df) < 30:
                     continue
 
                 df['SMA_20'] = df['close'].rolling(window=20).mean()
@@ -157,7 +149,6 @@ def main():
                 y = df_clean['close'].shift(-horizon).dropna()
                 X = X.iloc[: len(y)]
                 
-                # Geef een DataFrame mee inclusief column names i.p.v. een numpy array
                 latest_features = df_clean[features].iloc[[-1]]
 
                 model_xgb = xgb.XGBRegressor(
@@ -195,7 +186,7 @@ def main():
                 with open(state_file, 'w') as f:
                     json.dump(state, f, indent=4)
 
-                time.sleep(2) # Korte pauze om rate limits te voorkomen
+                time.sleep(2)
             except Exception:
                 pass
 
