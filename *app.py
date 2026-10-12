@@ -13,14 +13,13 @@ st.set_page_config(
 )
 
 st.title("⚡ RV Multi-Timeframe Ensemble Predictor")
-st.markdown("*Real-time ensemble voorspellingen (XGBoost + LightGBM + CatBoost) gevoed door yfinance data.*")
+st.markdown("*Real-time institutionele ensemble voorspellingen (XGBoost + LightGBM + CatBoost) gevoed door yfinance data.*")
 
 # Sidebar: Asset keuze & Tijdinterval (Timescales)
 asset_options = {
     'Bitcoin (BTC)': 'BTC',
     'Ethereum (ETH)': 'ETH',
     'Chainlink (LINK)': 'LINK',
-    'Aave (AAVE)': 'AAVE',
 }
 
 # Bijgewerkte tijdsbestekken inclusief 1 Week en 1 Maand
@@ -76,7 +75,7 @@ def load_dashboard_data(ticker, tf_info):
         st.error(f"Fout bij ophalen yfinance data: {e}")
         return None
 
-# Haal live grafiekdata op
+# Haal live data op voor actuele koers en RSI
 ticker = f"{asset_code}-USD"
 df = load_dashboard_data(ticker, interval_info)
 
@@ -88,27 +87,40 @@ if df is not None and not df.empty:
     
     if os.path.exists(state_file):
         try:
-            with open(state_file, 'r') as f:
+            with open(state_file, 'r', encoding='utf-8') as f:
                 state = json.load(f)
             
             predicted_price = state.get('last_prediction')
             lr = state.get('learning_rate', 0.05)
+            prob = state.get('direction_probability', 50.0)
+            lookback = state.get('lookback_window', 150)
+            sl = state.get('stop_loss', 0.0)
+            tp = state.get('take_profit', 0.0)
             
             if predicted_price is not None:
                 pct_diff = ((predicted_price - current_price) / current_price) * 100
                 
+                # Hoofdmetrics rij 1
                 col1, col2, col3, col4 = st.columns(4)
                 col1.metric("Huidige Koers (yfinance)", f"${current_price:,.2f}")
                 col2.metric(f"Ensemble Voorspelling ({interval_code})", f"${predicted_price:,.2f}", delta=f"{pct_diff:+.2f}%")
                 col3.metric("RSI (14)", f"{df['RSI'].iloc[-1]:.1f}")
-                col4.metric("Adaptieve LR", f"${lr:.4f}" if isinstance(lr, float) else f"{lr}")
+                col4.metric("Adaptieve LR", f"{lr:.4f}" if isinstance(lr, float) else f"{lr}")
+
+                # Extra institutionele metrics rij 2
+                col5, col6, col7, col8 = st.columns(4)
+                prob_color = "🟢" if prob >= 50 else "🔴"
+                col5.metric(f"{prob_color} De kans dat de prijs stijgt", f"{prob:.1f}%")
+                col6.metric("Lookback-venster", f"{lookback} candles")
+                col7.metric("Stop-Loss (SL)", f"${sl:,.2f}" if sl > 0 else "N.v.t.")
+                col8.metric("Take-Profit (TP)", f"${tp:,.2f}" if tp > 0 else "N.v.t.")
             else:
                 st.warning("Model state gevonden, maar nog geen voorspelling beschikbaar.")
                 
-            st.subheader(f"Prijsverloop ({interval_code}) - {selected_asset_name}")
-            st.line_chart(df['close'])
+            st.markdown("---")
             
-            with st.expander("📄 Bekijk Model & State Details"):
+            # Model details uitklapmenu (zonder grafiek ertussen)
+            with st.expander("📄 Bekijk Model & State Details (Weging, Fouten & Parameters)"):
                 st.json(state)
                 
         except Exception as e:
