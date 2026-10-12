@@ -1,9 +1,9 @@
 {
-    "learning_rate": 0.045000000000000005,
+    "learning_rate": 0.05,
     "max_depth": 5,
     "n_estimators": 100,
-    "previous_learning_rate": 0.05,
+    "previous_learning_rate": 0.045000000000000005,
     "previous_max_depth": 5,
-    "baseline_error": Infinity,
-    "last_prediction": 83101.22367925201
+    "baseline_error": 590.4658667520125,
+    "last_prediction": 83584.18686013577
 }
