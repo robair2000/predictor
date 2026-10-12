@@ -13,7 +13,7 @@ st.set_page_config(
 )
 
 st.title("🔮 RV Predictor")
-st.markdown("*Real-time institutionele ensemble voorspellingen (XGBoost + LightGBM + CatBoost) gevoed door yfinance data.*")
+st.markdown("*Its magic*")
 
 # Sidebar: Asset keuze & Tijdinterval (Timescales)
 asset_options = {
