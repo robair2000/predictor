@@ -7,7 +7,7 @@ import yfinance as yf
 
 # Pagina configuratie
 st.set_page_config(
-    page_title="Crypto Quant Dashboard",
+    page_title="RV Predictor",
     page_icon="⚡",
     layout="wide"
 )
