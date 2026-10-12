@@ -26,9 +26,10 @@ asset_options = {
 # 4 timescales zoals afgesproken
 interval_options = {
     '15 Minuten': {'interval': '15m', 'period': '59d', 'code': '15m'},
-    '1 Uur': {'interval': '1h', 'period': '59d', 'code': '1h'},       
-    '4 Uur': {'interval': '1h', 'period': '59d', 'resample': '4h', 'code': '4h'}, 
+    '1 Uur': {'interval': '1h', 'period': '730d', 'code': '1h'},
+    '4 Uur': {'interval': '1h', 'period': '730d', 'resample': '4h', 'code': '4h'},
     '1 Dag': {'interval': '1d', 'period': 'max', 'code': '1d'}
+}
 }
 
 selected_asset_name = st.sidebar.selectbox("Selecteer Asset", list(asset_options.keys()))
