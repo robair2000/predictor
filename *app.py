@@ -22,7 +22,6 @@ asset_options = {
     'Chainlink (LINK)': 'LINK',
 }
 
-# Bijgewerkte tijdsbestekken inclusief 1 Week en 1 Maand
 interval_options = {
     '15 Minuten': {'interval': '15m', 'period': '59d', 'code': '15m'},
     '1 Uur': {'interval': '1h', 'period': '730d', 'code': '1h'},
@@ -62,8 +61,7 @@ def load_dashboard_data(ticker, tf_info):
         df['Date'] = pd.to_datetime(df['Date'])
         df.set_index('Date', inplace=True)
         
-        # Technische indicatoren
-        df['SMA_20'] = df['close'].rolling(window=20).mean()
+        # Technische indicatoren voor de RSI metric
         delta = df['close'].diff()
         gain = delta.where(delta > 0, 0.0)
         loss = -delta.where(delta < 0, 0.0)
@@ -119,7 +117,7 @@ if df is not None and not df.empty:
                 
             st.markdown("---")
             
-            # Model details uitklapmenu (zonder grafiek ertussen)
+            # Model details uitklapmenu (GEEN grafieken hieronder)
             with st.expander("📄 Bekijk Model & State Details (Weging, Fouten & Parameters)"):
                 st.json(state)
                 
