@@ -20,8 +20,7 @@ asset_options = {
     'Bitcoin (BTC)': 'BTC',
     'Ethereum (ETH)': 'ETH',
     'Chainlink (LINK)': 'LINK',
-    'Aave (AAVE)': 'AAVE',
-}
+ }
 
 # Bijgewerkte tijdsbestekken inclusief 1 Week en 1 Maand
 interval_options = {
