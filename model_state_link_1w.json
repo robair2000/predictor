@@ -1,9 +1,24 @@
 {
-    "learning_rate": 0.04000000000000001,
+    "learning_rate": 0.03500000000000001,
     "max_depth": 5,
     "n_estimators": 100,
     "previous_learning_rate": 0.045000000000000005,
     "previous_max_depth": 5,
-    "baseline_error": 0.034341039131305706,
-    "last_prediction": 13.167218298521293
+    "baseline_error": 0.047218412962211076,
+    "last_prediction": 13.137785229762283,
+    "search_direction": -1,
+    "lookback_window": 140,
+    "model_weights": {
+        "xgb": 0.6786736860783973,
+        "lgb": 0.017100258294410902,
+        "cat": 0.3042260556271918
+    },
+    "model_errors": {
+        "xgb": 0.026206016540527344,
+        "lgb": 1.040062679318618,
+        "cat": 0.058460928176586435
+    },
+    "direction_probability": 47.940818786621094,
+    "stop_loss": 10.725290213312421,
+    "take_profit": 17.11118267263685
 }
