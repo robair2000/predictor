@@ -111,7 +111,7 @@ if df is not None and not df.empty:
                 # Extra institutionele metrics rij 2
                 col5, col6, col7, col8 = st.columns(4)
                 prob_color = "🟢" if prob >= 50 else "🔴"
-                col5.metric(f"{prob_color} Richtingskans", f"{prob:.1f}%")
+                col5.metric(f"{prob_color} De kans dat de prijs stijgt", f"{prob:.1f}%")
                 col6.metric("Lookback-venster", f"{lookback} candles")
                 col7.metric("Stop-Loss (SL)", f"${sl:,.2f}" if sl > 0 else "N.v.t.")
                 col8.metric("Take-Profit (TP)", f"${tp:,.2f}" if tp > 0 else "N.v.t.")
