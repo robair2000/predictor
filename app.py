@@ -40,17 +40,18 @@ interval_code = interval_info['code']
 
 @st.cache_data(ttl=300)
 def load_dashboard_data(ticker, tf_info):
-    """Haalt recente data op via yfinance met automatische 4h resampling indien nodig."""
+    """Haalt 1h data op via yfinance en resample deze naar 4h (of andere tijdsbestekken)."""
     try:
         df = yf.download(ticker, period=tf_info['period'], interval=tf_info['interval'], progress=False)
         if df is None or df.empty:
             return None
             
+        # Handelt moderne multi-index kolommen van yfinance af
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
             
         df = df.reset_index()
-        date_col = 'Datetime' if 'Datetime' in df.columns else 'Date'
+        date_col = 'Datetime' if 'Datetime' in df.columns else ('Date' if 'Date' in df.columns else df.columns[0])
         df = df.rename(columns={
             date_col: 'Date',
             'Open': 'open',
@@ -62,7 +63,7 @@ def load_dashboard_data(ticker, tf_info):
         df['Date'] = pd.to_datetime(df['Date'])
         df.set_index('Date', inplace=True)
         
-        # Resample naar 4h indien aangegeven
+        # Resample 1h data naar 4h candles
         if tf_info.get('resample') == '4h':
             df = df.resample('4H').agg({
                 'open': 'first',
@@ -73,7 +74,7 @@ def load_dashboard_data(ticker, tf_info):
             })
             df.dropna(inplace=True)
         
-        # Technische indicatoren voor de weergave
+        # Technische indicatoren
         df['SMA_20'] = df['close'].rolling(window=20).mean()
         delta = df['close'].diff()
         gain = delta.where(delta > 0, 0.0)
