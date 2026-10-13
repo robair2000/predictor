@@ -33,7 +33,7 @@ base_features = [
     'atr_ratio',
     'bb_position',
     'OBV_slope',
-    'VWAP_dist'
+    'VWAP_dist',
     'Supertrend_dist'
 ]
 
