@@ -68,27 +68,12 @@ timeframes = {
 }
 
 base_features = [
-    'return_1',
-    'dist_sma20',
-    'dist_sma50',
-    'dist_ema9',
-    'dist_ema21',
-    'RSI',
-    'atr_ratio',
-    'bb_position',
-    'OBV_slope',
-    'VWAP_dist',
-    'Supertrend_dist'
+    'return_1', 'dist_sma20', 'dist_sma50', 'dist_ema9', 'dist_ema21',
+    'RSI', 'atr_ratio', 'bb_position', 'OBV_slope', 'VWAP_dist', 'Supertrend_dist'
 ]
 
 optional_features = [
-    'MACD_hist',
-    'ADX',
-    'CMF',
-    'ATR_percentile',
-    'regime_score',
-    'smc_zone_dist',
-    'lorentzian_dist'
+    'MACD_hist', 'ADX', 'CMF', 'ATR_percentile', 'regime_score', 'smc_zone_dist', 'lorentzian_dist'
 ]
 
 def load_or_init_state(state_file):
@@ -203,7 +188,6 @@ def push_to_github():
     try:
         repo_url = f'https://{github_token}@github.com/robair2000/predictor.git'
         
-        # Voer git configuraties uit met volledige onderdrukking
         with open(os.devnull, 'wb') as devnull:
             subprocess.run(['git', 'config', '--global', 'user.email', 'render-worker@bot.com'], stdout=devnull, stderr=devnull)
             subprocess.run(['git', 'config', '--global', 'user.name', 'Render Quant Bot'], stdout=devnull, stderr=devnull)
@@ -431,4 +415,9 @@ def main():
     push_to_github()
 
 if __name__ == '__main__':
-    main()
+    while True:
+        try:
+            main()
+        except Exception:
+            pass
+        time.sleep(900)
