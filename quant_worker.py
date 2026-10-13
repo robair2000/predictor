@@ -363,3 +363,101 @@ def main():
                 body_size = (df['close'] - df['open']).abs()
                 avg_body = body_size.shift(1).rolling(20).mean()
                 is_order_block = body_size.shift(1) > (2.0 * avg_body)
+                recent_ob_price = np.where(is_order_block, (df['high'].shift(1) + df['low'].shift(1)) / 2, np.nan)
+                df['smc_zone_dist'] = (df['close'] - pd.Series(recent_ob_price).ffill()) / (df['close'] + 1e-8)
+                df['smc_zone_dist'] = df['smc_zone_dist'].fillna(0)
+
+                rolling_max = df['high'].shift(1).rolling(10).max()
+                rolling_min = df['low'].shift(1).rolling(10).min()
+                mid_range = (rolling_max + rolling_min) / 2
+                df['lorentzian_dist'] = (df['close'] - mid_range) / (rolling_max - rolling_min + 1e-8)
+                df['lorentzian_dist'] = df['lorentzian_dist'].fillna(0)
+
+                # 4. Open Interest Integratie via de gecorrigeerde merge functie
+                df = merge_price_and_oi(df, df_oi)
+
+                # Schoon alle kolommen op tegen oneindige waardes of NaNs
+                df = df.replace([np.inf, -np.inf], np.nan).fillna(0)
+
+                current_price = float(df['close'].iloc[-1])
+                current_atr = float(df['ATR'].iloc[-1]) if not np.isnan(df['ATR'].iloc[-1]) else (current_price * 0.02)
+
+                state = evaluate_and_adapt(state, current_price)
+                state['last_trained_timestamp'] = current_time
+
+                current_features = state['active_features']
+                df_clean = df.dropna(subset=current_features + ['close']).reset_index(drop=True)
+                if df_clean.empty:
+                    continue
+
+                lookback = state['lookback_window']
+                df_train = df_clean.iloc[-lookback:] if len(df_clean) > lookback else df_clean
+
+                horizon = tf_info['horizon']
+                X = df_train[current_features].iloc[:-horizon]
+                y_reg = df_train['close'].shift(-horizon).dropna()
+                X = X.iloc[: len(y_reg)]
+                
+                y_class = (df_train['close'].shift(-horizon) > df_train['close']).astype(int).iloc[:-horizon]
+                y_class = y_class.iloc[: len(X)]
+
+                latest_features = df_clean[current_features].iloc[[-1]]
+
+                # Modellen trainen
+                model_xgb = xgb.XGBRegressor(learning_rate=state['learning_rate'], max_depth=state['max_depth'], n_estimators=state['n_estimators'], random_state=42)
+                model_xgb.fit(X, y_reg)
+                pred_xgb = float(model_xgb.predict(latest_features)[0])
+
+                model_lgb = lgb.LGBMRegressor(learning_rate=state['learning_rate'], max_depth=state['max_depth'], n_estimators=state['n_estimators'], random_state=42, verbose=-1)
+                model_lgb.fit(X, y_reg)
+                pred_lgb = float(model_lgb.predict(latest_features)[0])
+
+                model_cat = CatBoostRegressor(learning_rate=state['learning_rate'], depth=state['max_depth'], iterations=state['n_estimators'], random_seed=42, verbose=0)
+                model_cat.fit(X, y_reg)
+                pred_cat = float(model_cat.predict(latest_features)[0])
+
+                model_rf = RandomForestRegressor(n_estimators=50, max_depth=state['max_depth'], random_state=42, n_jobs=-1)
+                model_rf.fit(X, y_reg)
+                pred_rf = float(model_rf.predict(latest_features)[0])
+
+                preds = {
+                    'xgb': pred_xgb,
+                    'lgb': pred_lgb,
+                    'cat': pred_cat,
+                    'rf': pred_rf
+                }
+
+                state = update_dynamic_weights(state, preds, current_price)
+                weights = state['model_weights']
+
+                next_prediction = sum(preds[m] * weights[m] for m in preds)
+                state['last_prediction'] = next_prediction
+
+                try:
+                    clf_xgb = xgb.XGBClassifier(n_estimators=50, max_depth=3, random_state=42, eval_metric='logloss')
+                    clf_xgb.fit(X, y_class)
+                    prob = clf_xgb.predict_proba(latest_features)[0][1]
+                    state['direction_probability'] = float(prob * 100)
+                except Exception:
+                    state['direction_probability'] = 50.0
+
+                if next_prediction > current_price:
+                    state['stop_loss'] = float(current_price - (1.5 * current_atr))
+                    state['take_profit'] = float(current_price + (2.5 * current_atr))
+                else:
+                    state['stop_loss'] = float(current_price + (1.5 * current_atr))
+                    state['take_profit'] = float(current_price - (2.5 * current_atr))
+
+                with open(state_file, 'w', encoding='utf-8') as f:
+                    json.dump(state, f, indent=4)
+
+                gc.collect()
+                time.sleep(1)
+            except Exception as e:
+                print(f"Fout bij {asset} {tf_name}: {e}")
+
+    push_to_github()
+    print("--- Smart Evolutionary Ensemble Quant Worker voltooid ---")
+
+if __name__ == '__main__':
+    main()
