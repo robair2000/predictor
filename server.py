@@ -6,7 +6,7 @@ app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "Quant Worker Server is actief!"
+    return "OK", 200
 
 @app.route("/run-worker")
 def trigger_worker():
@@ -15,9 +15,9 @@ def trigger_worker():
         worker_thread = threading.Thread(target=run_quant_worker)
         worker_thread.start()
     except Exception as e:
-        print(f"Fout bij starten worker: {e}")
+        print(f"Kritieke fout bij starten worker thread: {e}")
     
-    # Altijd een minimale respons van 2 letters teruggeven
+    # Altijd een keiharde, korte respons van exact 2 letters en niks anders
     return "OK", 200
 
 if __name__ == "__main__":
