@@ -1,7 +1,24 @@
+import os
+import sys
+
+# --- HARDCORE OS-NIVEAU OUTPUT ONDERDRUKKING ---
+# Dit blok blokkeert ook alle C++ output van XGBoost, LightGBM en CatBoost
+def suppress_output():
+    try:
+        sys.stdout.flush()
+        sys.stderr.flush()
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull, 1)
+        os.dup2(devnull, 2)
+        os.close(devnull)
+    except Exception:
+        pass
+
+suppress_output()
+
 import warnings
 warnings.filterwarnings('ignore', category=UserWarning)
 import json
-import os
 import subprocess
 import time
 import gc
@@ -13,14 +30,7 @@ import lightgbm as lgb
 from catboost import CatBoostRegressor
 from sklearn.ensemble import RandomForestRegressor
 import logging
-import sys
 
-# --- STILTE-MODUS (VOORKOMT 'OUTPUT TOO LARGE' FOUTEN) ---
-# Stuur alle console-output altijd naar /dev/null om limieten te omzeilen
-sys.stdout = open(os.devnull, 'w')
-sys.stderr = open(os.devnull, 'w')
-
-# Onderdruk alle standaard waarschuwingen en externe bibliotheek logs
 warnings.filterwarnings('ignore')
 logging.getLogger('yfinance').setLevel(logging.ERROR)
 logging.getLogger('xgboost').setLevel(logging.ERROR)
@@ -28,7 +38,6 @@ logging.getLogger('lightgbm').setLevel(logging.ERROR)
 
 assets = ['BTC', 'ETH', 'LINK']
 
-# Tijdsframes met geoptimaliseerde periodes om RAM-pieken op Render te voorkomen
 timeframes = {
     '15m': {'interval': '15m', 'period': '59d', 'horizon': 1, 'min_interval_seconds': 14 * 60},
     '1h': {'interval': '1h', 'period': '365d', 'horizon': 1, 'min_interval_seconds': 55 * 60},
@@ -344,7 +353,7 @@ def main():
 
                 latest_features = df_clean[current_features].iloc[[-1]]
 
-                model_xgb = xgb.XGBRegressor(learning_rate=state['learning_rate'], max_depth=state['max_depth'], n_estimators=state['n_estimators'], random_state=42)
+                model_xgb = xgb.XGBRegressor(learning_rate=state['learning_rate'], max_depth=state['max_depth'], n_estimators=state['n_estimators'], random_state=42, verbosity=0)
                 model_xgb.fit(X, y_reg)
                 pred_xgb = float(model_xgb.predict(latest_features)[0])
 
@@ -374,7 +383,7 @@ def main():
                 state['last_prediction'] = next_prediction
 
                 try:
-                    clf_xgb = xgb.XGBClassifier(n_estimators=50, max_depth=3, random_state=42, eval_metric='logloss')
+                    clf_xgb = xgb.XGBClassifier(n_estimators=50, max_depth=3, random_state=42, eval_metric='logloss', verbosity=0)
                     clf_xgb.fit(X, y_class)
                     prob = clf_xgb.predict_proba(latest_features)[0][1]
                     state['direction_probability'] = float(prob * 100)
