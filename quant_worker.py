@@ -1,8 +1,32 @@
 import os
 import sys
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
+# --- MINI WEBSERVER VOOR RENDER HEALTH CHECKS (DIRECT ALS EERSTE) ---
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/plain')
+        self.end_headers()
+        self.wfile.write(b'Quant Worker Online')
+    
+    def log_message(self, format, *args):
+        pass
+
+def start_web_server():
+    try:
+        port = int(os.environ.get('PORT', 10000))
+        server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
+        server.serve_forever()
+    except Exception:
+        pass
+
+# Start de webserver direct op de achtergrond
+server_thread = threading.Thread(target=start_web_server, daemon=True)
+server_thread.start()
 
 # --- HARDCORE OS-NIVEAU OUTPUT ONDERDRUKKING ---
-# Dit blok blokkeert ook alle C++ output van XGBoost, LightGBM en CatBoost
 def suppress_output():
     try:
         sys.stdout.flush()
@@ -26,7 +50,6 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 import xgboost as xgb
-import lightgbm as lgb
 from catboost import CatBoostRegressor
 from sklearn.ensemble import RandomForestRegressor
 import logging
@@ -34,7 +57,6 @@ import logging
 warnings.filterwarnings('ignore')
 logging.getLogger('yfinance').setLevel(logging.ERROR)
 logging.getLogger('xgboost').setLevel(logging.ERROR)
-logging.getLogger('lightgbm').setLevel(logging.ERROR)
 
 assets = ['BTC', 'ETH', 'LINK']
 
@@ -71,7 +93,7 @@ optional_features = [
 ]
 
 def load_or_init_state(state_file):
-    models = ['xgb', 'lgb', 'cat', 'rf']
+    models = ['xgb', 'cat', 'rf']
     if os.path.exists(state_file):
         with open(state_file, 'r', encoding='utf-8') as f:
             state = json.load(f)
@@ -357,10 +379,6 @@ def main():
                 model_xgb.fit(X, y_reg)
                 pred_xgb = float(model_xgb.predict(latest_features)[0])
 
-                model_lgb = lgb.LGBMRegressor(learning_rate=state['learning_rate'], max_depth=state['max_depth'], n_estimators=state['n_estimators'], random_state=42, verbose=-1)
-                model_lgb.fit(X, y_reg)
-                pred_lgb = float(model_lgb.predict(latest_features)[0])
-
                 model_cat = CatBoostRegressor(learning_rate=state['learning_rate'], depth=state['max_depth'], iterations=state['n_estimators'], random_seed=42, verbose=0)
                 model_cat.fit(X, y_reg)
                 pred_cat = float(model_cat.predict(latest_features)[0])
@@ -371,7 +389,6 @@ def main():
 
                 preds = {
                     'xgb': pred_xgb,
-                    'lgb': pred_lgb,
                     'cat': pred_cat,
                     'rf': pred_rf
                 }
