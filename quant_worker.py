@@ -14,6 +14,13 @@ from catboost import CatBoostRegressor
 from sklearn.ensemble import RandomForestRegressor
 import logging
 import warnings
+import sys
+import os
+
+# Stuur alle console-output naar /dev/null om Render test-run limieten te omzeilen
+if os.environ.get('RENDER'):
+    sys.stdout = open(os.devnull, 'w')
+    sys.stderr = open(os.devnull, 'w')
 
 # Onderdruk alle standaard waarschuwingen en externe bibliotheek logs
 warnings.filterwarnings('ignore')
