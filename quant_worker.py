@@ -3,7 +3,7 @@ import sys
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
-# --- HARDCORE OS-NIVEAU OUTPUT ONDERDRUKKING (DIRECT ALS EERSTE) ---
+# --- HARDCORE OS-NIVEAU OUTPUT ONDERDRUKKING ---
 def suppress_output():
     try:
         sys.stdout.flush()
@@ -62,9 +62,9 @@ assets = ['BTC', 'ETH', 'LINK']
 timeframes = {
     '15m': {'interval': '15m', 'period': '59d', 'horizon': 1, 'min_interval_seconds': 14 * 60},
     '1h': {'interval': '1h', 'period': '365d', 'horizon': 1, 'min_interval_seconds': 55 * 60},
-    '1d': {'interval': '1d', 'period': '730d', 'horizon': 1, 'min_interval_seconds': 23 * 3600},
-    '1w': {'interval': '1wk', 'period': '730d', 'horizon': 1, 'min_interval_seconds': 6 * 86400},
-    '1m': {'interval': '1mo', 'period': 'max', 'horizon': 1, 'min_interval_seconds': 25 * 86400},
+    '1d': {'interval': '1d', 'period': '365d', 'horizon': 1, 'min_interval_seconds': 23 * 3600},
+    '1w': {'interval': '1wk', 'period': '365d', 'horizon': 1, 'min_interval_seconds': 6 * 86400},
+    '1m': {'interval': '1mo', 'period': '365d', 'horizon': 1, 'min_interval_seconds': 25 * 86400},
 }
 
 base_features = [
@@ -103,8 +103,8 @@ def load_or_init_state(state_file):
     initial_weight = 1.0 / len(models)
     return {
         'learning_rate': 0.05,
-        'max_depth': 5,
-        'n_estimators': 100,
+        'max_depth': 4, # Verlaagd om RAM te besparen
+        'n_estimators': 50, # Verlaagd om RAM te besparen
         'baseline_error': float('inf'),
         'last_prediction': None,
         'search_direction': 1,
@@ -365,15 +365,16 @@ def main():
 
                 latest_features = df_clean[current_features].iloc[[-1]]
 
-                model_xgb = xgb.XGBRegressor(learning_rate=state['learning_rate'], max_depth=state['max_depth'], n_estimators=state['n_estimators'], random_state=42, verbosity=0)
+                # Lichte modellen om RAM binnen 512MB te houden
+                model_xgb = xgb.XGBRegressor(learning_rate=state['learning_rate'], max_depth=4, n_estimators=50, random_state=42, verbosity=0, n_jobs=1)
                 model_xgb.fit(X, y_reg)
                 pred_xgb = float(model_xgb.predict(latest_features)[0])
 
-                model_cat = CatBoostRegressor(learning_rate=state['learning_rate'], depth=state['max_depth'], iterations=state['n_estimators'], random_seed=42, verbose=0)
+                model_cat = CatBoostRegressor(learning_rate=state['learning_rate'], depth=4, iterations=50, random_seed=42, verbose=0, thread_count=1)
                 model_cat.fit(X, y_reg)
                 pred_cat = float(model_cat.predict(latest_features)[0])
 
-                model_rf = RandomForestRegressor(n_estimators=50, max_depth=state['max_depth'], random_state=42, n_jobs=-1)
+                model_rf = RandomForestRegressor(n_estimators=30, max_depth=4, random_state=42, n_jobs=1)
                 model_rf.fit(X, y_reg)
                 pred_rf = float(model_rf.predict(latest_features)[0])
 
@@ -390,7 +391,7 @@ def main():
                 state['last_prediction'] = next_prediction
 
                 try:
-                    clf_xgb = xgb.XGBClassifier(n_estimators=50, max_depth=3, random_state=42, eval_metric='logloss', verbosity=0)
+                    clf_xgb = xgb.XGBClassifier(n_estimators=30, max_depth=3, random_state=42, eval_metric='logloss', verbosity=0, n_jobs=1)
                     clf_xgb.fit(X, y_class)
                     prob = clf_xgb.predict_proba(latest_features)[0][1]
                     state['direction_probability'] = float(prob * 100)
@@ -407,9 +408,12 @@ def main():
                 with open(state_file, 'w', encoding='utf-8') as f:
                     json.dump(state, f, indent=4)
 
+                # Direct en agressief geheugen opruimen per iteratie
+                del model_xgb, model_cat, model_rf, df, df_clean, df_train, X, y_reg, y_class
                 gc.collect()
-                time.sleep(1)
+                time.sleep(2)
             except Exception:
+                gc.collect()
                 pass
 
     push_to_github()
@@ -420,4 +424,5 @@ if __name__ == '__main__':
             main()
         except Exception:
             pass
+        gc.collect()
         time.sleep(900)
