@@ -347,58 +347,37 @@ def main():
                 mf_volume = mf_multiplier * df['volume']
                 df['CMF'] = mf_volume.rolling(window=20).sum() / (df['volume'].rolling(window=20).sum() + 1e-8)
 
-                df['ATR_percentile'] = df['ATR'].rolling(window=100).apply(lambda x: pd.Series(x).rank(pct=True).iloc[-1], raw=False)
+                # 1. Supersnelle vectoriële percentile rank (voorkomt CPU timeouts)
+df['ATR_percentile'] = df['ATR'].rolling(window=100).rank(pct=True)
 
-                # 2. Multitimeframe (MTF) Macro Trend
-                macro_ema = df['close'].ewm(span=200, adjust=False).mean()
-                df['macro_trend'] = (df['close'] - macro_ema) / (macro_ema + 1e-8)
+current_price = float(df['close'].iloc[-1])
+current_atr = float(df['ATR'].iloc[-1]) if not np.isnan(df['ATR'].iloc[-1]) else (current_price * 0.02)
 
-                # 3. Market Regime & Leakage-Free Features
-                adx_val = df['ADX'] if 'ADX' in df.columns else dx.rolling(window=14).mean()
-                df['regime_score'] = (adx_val / 100.0) * (1.0 - df['atr_ratio'] / (df['atr_ratio'].rolling(20).mean() + 1e-8))
+state = evaluate_and_adapt(state, current_price)
+state['last_trained_timestamp'] = current_time
+current_features = state['active_features']
 
-                body_size = (df['close'] - df['open']).abs()
-                avg_body = body_size.shift(1).rolling(20).mean()
-                is_order_block = body_size.shift(1) > (2.0 * avg_body)
-                recent_ob_price = np.where(is_order_block, (df['high'].shift(1) + df['low'].shift(1)) / 2, np.nan)
-                df['smc_zone_dist'] = (df['close'] - pd.Series(recent_ob_price).ffill()) / (df['close'] + 1e-8)
-                df['smc_zone_dist'] = df['smc_zone_dist'].fillna(0)
+# 2. Waterdichte targets aanmaken in de hoofd-dataframe (voorkomt data alignment-fouten)
+df['target_reg'] = df['close'].shift(-tf_info['horizon'])
+df['target_class'] = (df['target_reg'] > df['close']).astype(int)
 
-                rolling_max = df['high'].shift(1).rolling(10).max()
-                rolling_min = df['low'].shift(1).rolling(10).min()
-                mid_range = (rolling_max + rolling_min) / 2
-                df['lorentzian_dist'] = (df['close'] - mid_range) / (rolling_max - rolling_min + 1e-8)
-                df['lorentzian_dist'] = df['lorentzian_dist'].fillna(0)
+# 3. Data opschonen
+df_clean = df.dropna(subset=current_features + ['target_reg']).reset_index(drop=True)
+if df_clean.empty:
+    continue
 
-                # 4. Open Interest Integratie via jouw geavanceerde merge functie
-                df = merge_price_and_oi(df, df_oi)
+# 4. Filteren op de dynamische lookback window
+lookback = state['lookback_window']
+df_train = df_clean.tail(lookback)
 
-                # Schoon alle kolommen op tegen oneindige waardes of NaNs
-                df = df.replace([np.inf, -np.inf], np.nan).fillna(0)
+# 5. Gealigneerde NumPy arrays genereren voor de training (iloc is hierdoor niet meer nodig)
+X = df_train[current_features].values
+y_reg = df_train['target_reg'].values
+y_class = df_train['target_class'].values
 
-                current_price = float(df['close'].iloc[-1])
-                current_atr = float(df['ATR'].iloc[-1]) if not np.isnan(df['ATR'].iloc[-1]) else (current_price * 0.02)
+# 6. De allernieuwste rij isoleren voor de live voorspelling
+latest_features = df_clean[current_features].iloc[[-1]]
 
-                state = evaluate_and_adapt(state, current_price)
-                state['last_trained_timestamp'] = current_time
-
-                current_features = state['active_features']
-                df_clean = df.dropna(subset=current_features + ['close']).reset_index(drop=True)
-                if df_clean.empty:
-                    continue
-
-                lookback = state['lookback_window']
-                df_train = df_clean.iloc[-lookback:] if len(df_clean) > lookback else df_clean
-
-                horizon = tf_info['horizon']
-                X = df_train[current_features].iloc[:-horizon]
-                y_reg = df_train['close'].shift(-horizon).dropna()
-                X = X.iloc[: len(y_reg)]
-                
-                y_class = (df_train['close'].shift(-horizon) > df_train['close']).astype(int).iloc[:-horizon]
-                y_class = y_class.iloc[: len(X)]
-
-                latest_features = df_clean[current_features].iloc[[-1]]
 
                 # Modellen trainen
                 model_xgb = xgb.XGBRegressor(learning_rate=state['learning_rate'], max_depth=state['max_depth'], n_estimators=state['n_estimators'], random_state=42)
