@@ -202,19 +202,23 @@ def push_to_github():
         return
     try:
         repo_url = f'https://{github_token}@github.com/robair2000/predictor.git'
-        subprocess.run(['git', 'config', '--global', 'user.email', 'render-worker@bot.com'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-        subprocess.run(['git', 'config', '--global', 'user.name', 'Render Quant Bot'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-        subprocess.run(['git', 'add', '*.json'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-
-        status = subprocess.run(['git', 'status', '--porcelain'], capture_output=True, text=True, check=True)
-        if not status.stdout.strip():
-            return
-
-        subprocess.run(['git', 'commit', '-m', 'Auto-update Smart Evolutionary Ensemble [skip ci]'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-        branch_res = subprocess.run(['git', 'branch', '--show-current'], capture_output=True, text=True, check=True)
-        current_branch = branch_res.stdout.strip() or 'main'
         
-        subprocess.run(['git', 'push', '--force', repo_url, f'HEAD:{current_branch}'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+        # Voer git configuraties uit met volledige onderdrukking
+        with open(os.devnull, 'wb') as devnull:
+            subprocess.run(['git', 'config', '--global', 'user.email', 'render-worker@bot.com'], stdout=devnull, stderr=devnull)
+            subprocess.run(['git', 'config', '--global', 'user.name', 'Render Quant Bot'], stdout=devnull, stderr=devnull)
+            subprocess.run(['git', 'add', '*.json'], stdout=devnull, stderr=devnull)
+
+            status = subprocess.run(['git', 'status', '--porcelain'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            if not status.stdout or not status.stdout.strip():
+                return
+
+            subprocess.run(['git', 'commit', '-m', 'Auto-update Smart Evolutionary Ensemble [skip ci]'], stdout=devnull, stderr=devnull)
+            
+            branch_res = subprocess.run(['git', 'branch', '--show-current'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            current_branch = branch_res.stdout.strip() or 'main'
+            
+            subprocess.run(['git', 'push', '--force', repo_url, f'HEAD:{current_branch}'], stdout=devnull, stderr=devnull)
     except Exception:
         pass
 
