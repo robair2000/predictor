@@ -224,24 +224,25 @@ def main():
                 vwap = (df['volume'] * typical_price).cumsum() / (df['volume'].cumsum() + 1e-8)
                 df['VWAP_dist'] = (df['close'] - vwap) / vwap
 
-                # Supersnelle vectoriële Supertrend berekening
+               # Supersnelle vectoriële Supertrend berekening (met schrijfbare arrays)
                 hl2 = (df['high'] + df['low']) / 2
                 atr3 = 3.0 * df['ATR']
                 basic_upper = hl2 + atr3
                 basic_lower = hl2 - atr3
                 
-                final_upper = basic_upper.copy()
-                final_lower = basic_lower.copy()
-                trend = pd.Series(1, index=df.index)
+                # Zorg dat de numpy arrays expliciet schrijfbaar zijn om read-only errors te voorkomen
+                upper_val = basic_upper.to_numpy(copy=True)
+                lower_val = basic_lower.to_numpy(copy=True)
+                close_val = df['close'].to_numpy(copy=True)
                 
-                upper_val = basic_upper.values
-                lower_val = basic_lower.values
-                close_val = df['close'].values
-                f_upper = final_upper.values
-                f_lower = final_lower.values
-                t_arr = trend.values
+                f_upper = basic_upper.to_numpy(copy=True)
+                f_lower = basic_lower.to_numpy(copy=True)
+                t_arr = np.ones(len(df), dtype=int)
                 
                 for i in range(1, len(df)):
+                    if np.isnan(upper_val[i]) or np.isnan(f_upper[i-1]):
+                        continue
+                        
                     if upper_val[i] < f_upper[i-1] or close_val[i-1] > f_upper[i-1]:
                         f_upper[i] = upper_val[i]
                     else:
@@ -259,11 +260,7 @@ def main():
                     else:
                         t_arr[i] = t_arr[i-1]
                         
-                final_upper[:] = f_upper
-                final_lower[:] = f_lower
-                trend[:] = t_arr
-                
-                supertrend = np.where(trend == 1, final_lower, final_upper)
+                supertrend = np.where(t_arr == 1, f_lower, f_upper)
                 df['Supertrend_dist'] = (df['close'] - supertrend) / (df['close'] + 1e-8)
 
                 # Optionele indicatoren
