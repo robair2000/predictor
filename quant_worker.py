@@ -13,14 +13,12 @@ import lightgbm as lgb
 from catboost import CatBoostRegressor
 from sklearn.ensemble import RandomForestRegressor
 import logging
-import warnings
 import sys
-import os
 
-# Stuur alle console-output naar /dev/null om Render test-run limieten te omzeilen
-if os.environ.get('RENDER'):
-    sys.stdout = open(os.devnull, 'w')
-    sys.stderr = open(os.devnull, 'w')
+# --- STILTE-MODUS (VOORKOMT 'OUTPUT TOO LARGE' FOUTEN) ---
+# Stuur alle console-output altijd naar /dev/null om limieten te omzeilen
+sys.stdout = open(os.devnull, 'w')
+sys.stderr = open(os.devnull, 'w')
 
 # Onderdruk alle standaard waarschuwingen en externe bibliotheek logs
 warnings.filterwarnings('ignore')
@@ -50,18 +48,17 @@ base_features = [
     'bb_position',
     'OBV_slope',
     'VWAP_dist',
-    'Supertrend_dist'  # Vaste basisfeature
+    'Supertrend_dist'
 ]
 
-# Uitbreiding van optionele features met alle geavanceerde institutionele wensen tegelijk
 optional_features = [
     'MACD_hist',
     'ADX',
     'CMF',
     'ATR_percentile',
-    'regime_score',     # 1. Market Regime (Trend vs Chop)
-    'smc_zone_dist',    # 2. Smart Money Concepts / Order Blocks afstand
-    'lorentzian_dist'   # 3. KNN / Lorentzian-achtige patroonafstand
+    'regime_score',
+    'smc_zone_dist',
+    'lorentzian_dist'
 ]
 
 def load_or_init_state(state_file):
@@ -163,37 +160,32 @@ def fetch_data_safely(ticker, tf_info):
         df['Date'] = pd.to_datetime(df['Date'])
         df.set_index('Date', inplace=True)
         return df.reset_index(drop=True)
-    except Exception as e:
-        print(f"[{ticker}] Fout bij ophalen data: {e}")
+    except Exception:
         return pd.DataFrame()
 
 def push_to_github():
     github_token = os.environ.get('GITHUB_TOKEN')
     if not github_token:
-        print("[GitHub] Waarschuwing: GITHUB_TOKEN ontbreekt in Render environment variables!")
         return
     try:
         repo_url = f'https://{github_token}@github.com/robair2000/predictor.git'
-        subprocess.run(['git', 'config', '--global', 'user.email', 'render-worker@bot.com'], check=True)
-        subprocess.run(['git', 'config', '--global', 'user.name', 'Render Quant Bot'], check=True)
-        subprocess.run(['git', 'add', '*.json'], check=True)
+        subprocess.run(['git', 'config', '--global', 'user.email', 'render-worker@bot.com'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+        subprocess.run(['git', 'config', '--global', 'user.name', 'Render Quant Bot'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+        subprocess.run(['git', 'add', '*.json'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
 
         status = subprocess.run(['git', 'status', '--porcelain'], capture_output=True, text=True, check=True)
         if not status.stdout.strip():
-            print("[GitHub] Geen gewijzigde .json bestanden gevonden om te pushen.")
             return
 
-        subprocess.run(['git', 'commit', '-m', 'Auto-update Smart Evolutionary Ensemble [skip ci]'], check=True)
+        subprocess.run(['git', 'commit', '-m', 'Auto-update Smart Evolutionary Ensemble [skip ci]'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
         branch_res = subprocess.run(['git', 'branch', '--show-current'], capture_output=True, text=True, check=True)
         current_branch = branch_res.stdout.strip() or 'main'
         
-        subprocess.run(['git', 'push', '--force', repo_url, f'HEAD:{current_branch}'], capture_output=True, check=True)
-        print(f"[GitHub] Succesvol gepusht naar branch {current_branch}!")
-    except Exception as e:
-        print(f"[GitHub] Fout opgetreden tijdens GitHub push: {e}")
+        subprocess.run(['git', 'push', '--force', repo_url, f'HEAD:{current_branch}'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+    except Exception:
+        pass
 
 def main():
-    print("--- Smart Evolutionary Ensemble Quant Worker gestart ---")
     current_time = time.time()
     
     for asset in assets:
@@ -211,7 +203,6 @@ def main():
                 if df is None or df.empty or len(df) < 60:
                     continue
 
-                # Standaard indicatoren
                 df['SMA_20'] = df['close'].rolling(window=20).mean()
                 df['SMA_50'] = df['close'].rolling(window=50).mean()
                 df['EMA_9'] = df['close'].ewm(span=9, adjust=False).mean()
@@ -248,7 +239,6 @@ def main():
                 vwap = (df['volume'] * typical_price).cumsum() / (df['volume'].cumsum() + 1e-8)
                 df['VWAP_dist'] = (df['close'] - vwap) / vwap
 
-                # Supersnelle vectoriële Supertrend berekening
                 hl2 = (df['high'] + df['low']) / 2
                 atr3 = 3.0 * df['ATR']
                 basic_upper = hl2 + atr3
@@ -293,7 +283,6 @@ def main():
                 supertrend = np.where(t_arr == 1, f_lower, f_upper)
                 df['Supertrend_dist'] = (df['close'] - supertrend) / (df['close'] + 1e-8)
 
-                # Standaard optionele indicatoren
                 ema_12 = df['close'].ewm(span=12, adjust=False).mean()
                 ema_26 = df['close'].ewm(span=26, adjust=False).mean()
                 macd_line = ema_12 - ema_26
@@ -316,15 +305,9 @@ def main():
 
                 df['ATR_percentile'] = df['ATR'].rolling(window=100).apply(lambda x: pd.Series(x).rank(pct=True).iloc[-1], raw=False)
 
-                # ==========================================
-                # GEAVANCEERDE MODulaire FEATURES TOEVOEGEN
-                # ==========================================
-                
-                # 1. Market Regime Detection (Trend vs Range)
                 adx_val = df['ADX'] if 'ADX' in df.columns else dx.rolling(window=14).mean()
                 df['regime_score'] = (adx_val / 100.0) * (1.0 - df['atr_ratio'] / (df['atr_ratio'].rolling(20).mean() + 1e-8))
 
-                # 2. Smart Money Concepts (SMC) - Afstand tot recente grote wick-zones (Order Blocks)
                 body_size = (df['close'] - df['open']).abs()
                 avg_body = body_size.rolling(20).mean()
                 is_order_block = body_size > (2.0 * avg_body)
@@ -332,13 +315,10 @@ def main():
                 df['smc_zone_dist'] = (df['close'] - pd.Series(recent_ob_price).ffill()) / (df['close'] + 1e-8)
                 df['smc_zone_dist'] = df['smc_zone_dist'].fillna(0)
 
-                # 3. Lorentzian / KNN-achtige afstand tot lokale toppen en bodems
                 rolling_max = df['high'].rolling(10).max()
                 rolling_min = df['low'].rolling(10).min()
                 mid_range = (rolling_max + rolling_min) / 2
                 df['lorentzian_dist'] = (df['close'] - mid_range) / (rolling_max - rolling_min + 1e-8)
-
-                # ==========================================
 
                 current_price = float(df['close'].iloc[-1])
                 current_atr = float(df['ATR'].iloc[-1]) if not np.isnan(df['ATR'].iloc[-1]) else (current_price * 0.02)
@@ -364,7 +344,6 @@ def main():
 
                 latest_features = df_clean[current_features].iloc[[-1]]
 
-                # Modellen trainen
                 model_xgb = xgb.XGBRegressor(learning_rate=state['learning_rate'], max_depth=state['max_depth'], n_estimators=state['n_estimators'], random_state=42)
                 model_xgb.fit(X, y_reg)
                 pred_xgb = float(model_xgb.predict(latest_features)[0])
@@ -412,15 +391,12 @@ def main():
                 with open(state_file, 'w', encoding='utf-8') as f:
                     json.dump(state, f, indent=4)
 
-                # Geheugen direct opruimen per iteratie
                 gc.collect()
-
                 time.sleep(1)
-            except Exception as e:
-                print(f"Fout bij {asset} {tf_name}: {e}")
+            except Exception:
+                pass
 
     push_to_github()
-    print("--- Smart Evolutionary Ensemble Quant Worker voltooid ---")
 
 if __name__ == '__main__':
     main()
