@@ -16,11 +16,11 @@ assets = ['BTC', 'ETH', 'LINK']
 
 # Tijdsframes met minimale seconden tussen trainingen om onnodig herberekenen te voorkomen
 timeframes = {
-    '15m': {'interval': '15m', 'period': '59d', 'horizon': 1, 'min_interval_seconds': 14 * 60},       # Elke ~15 min
-    '1h': {'interval': '1h', 'period': '730d', 'horizon': 1, 'min_interval_seconds': 55 * 60},        # Elk uur
-    '1d': {'interval': '1d', 'period': '730d', 'horizon': 1, 'min_interval_seconds': 23 * 3600},     # Eens per dag
-    '1w': {'interval': '1wk', 'period': '730d', 'horizon': 1, 'min_interval_seconds': 6 * 86400},    # Eens per week
-    '1m': {'interval': '1mo', 'period': 'max', 'horizon': 1, 'min_interval_seconds': 25 * 86400},    # Eens per maand
+    '15m': {'interval': '15m', 'period': '59d', 'horizon': 1, 'min_interval_seconds': 14 * 60},
+    '1h': {'interval': '1h', 'period': '730d', 'horizon': 1, 'min_interval_seconds': 55 * 60},
+    '1d': {'interval': '1d', 'period': '730d', 'horizon': 1, 'min_interval_seconds': 23 * 3600},
+    '1w': {'interval': '1wk', 'period': '730d', 'horizon': 1, 'min_interval_seconds': 6 * 86400},
+    '1m': {'interval': '1mo', 'period': 'max', 'horizon': 1, 'min_interval_seconds': 25 * 86400},
 }
 
 base_features = [
@@ -34,7 +34,7 @@ base_features = [
     'bb_position',
     'OBV_slope',
     'VWAP_dist',
-    'Supertrend_dist'
+    'Supertrend_dist'  # Vaste basisfeature
 ]
 
 optional_features = [
@@ -98,7 +98,6 @@ def evaluate_and_adapt(state, current_price):
     window_mutation = np.random.choice([-10, 10])
     state['lookback_window'] = int(np.clip(state['lookback_window'] + window_mutation, 60, 300))
 
-    # Evolutionair experimenteren met features (mutatie)
     if np.random.rand() < 0.3:
         available_opts = [f for f in optional_features if f not in state['active_features']]
         if available_opts and len(state['active_features']) < (len(base_features) + len(optional_features)):
@@ -180,16 +179,15 @@ def main():
             try:
                 state = load_or_init_state(state_file)
                 
-                # Slimme interval check: sla zware training over als het nog niet tijd is voor dit tijdsframe
                 last_trained = state.get('last_trained_timestamp', 0)
                 if tf_name != '15m' and (current_time - last_trained < tf_info['min_interval_seconds']):
-                    continue  # Sla dit tijdsframe deze cyclus over om CPU te besparen
+                    continue
 
                 df = fetch_data_safely(ticker, tf_info)
                 if df is None or df.empty or len(df) < 60:
                     continue
 
-                # Standaard indicatoren berekenen
+                # Standaard indicatoren
                 df['SMA_20'] = df['close'].rolling(window=20).mean()
                 df['SMA_50'] = df['close'].rolling(window=50).mean()
                 df['EMA_9'] = df['close'].ewm(span=9, adjust=False).mean()
@@ -226,7 +224,49 @@ def main():
                 vwap = (df['volume'] * typical_price).cumsum() / (df['volume'].cumsum() + 1e-8)
                 df['VWAP_dist'] = (df['close'] - vwap) / vwap
 
-                # Extra geavanceerde optionele indicatoren
+                # Supersnelle vectoriële Supertrend berekening
+                hl2 = (df['high'] + df['low']) / 2
+                atr3 = 3.0 * df['ATR']
+                basic_upper = hl2 + atr3
+                basic_lower = hl2 - atr3
+                
+                final_upper = basic_upper.copy()
+                final_lower = basic_lower.copy()
+                trend = pd.Series(1, index=df.index)
+                
+                upper_val = basic_upper.values
+                lower_val = basic_lower.values
+                close_val = df['close'].values
+                f_upper = final_upper.values
+                f_lower = final_lower.values
+                t_arr = trend.values
+                
+                for i in range(1, len(df)):
+                    if upper_val[i] < f_upper[i-1] or close_val[i-1] > f_upper[i-1]:
+                        f_upper[i] = upper_val[i]
+                    else:
+                        f_upper[i] = f_upper[i-1]
+                        
+                    if lower_val[i] > f_lower[i-1] or close_val[i-1] < f_lower[i-1]:
+                        f_lower[i] = lower_val[i]
+                    else:
+                        f_lower[i] = f_lower[i-1]
+                        
+                    if close_val[i] > f_upper[i-1]:
+                        t_arr[i] = 1
+                    elif close_val[i] < f_lower[i-1]:
+                        t_arr[i] = -1
+                    else:
+                        t_arr[i] = t_arr[i-1]
+                        
+                final_upper[:] = f_upper
+                final_lower[:] = f_lower
+                trend[:] = t_arr
+                
+                supertrend = np.where(trend == 1, final_lower, final_upper)
+                df['Supertrend_dist'] = (df['close'] - supertrend) / (df['close'] + 1e-8)
+
+                # Optionele indicatoren
                 ema_12 = df['close'].ewm(span=12, adjust=False).mean()
                 ema_26 = df['close'].ewm(span=26, adjust=False).mean()
                 macd_line = ema_12 - ema_26
@@ -273,7 +313,7 @@ def main():
 
                 latest_features = df_clean[current_features].iloc[[-1]]
 
-                # 1. Regressiemodellen (4-modellen ensemble)
+                # Modellen trainen
                 model_xgb = xgb.XGBRegressor(learning_rate=state['learning_rate'], max_depth=state['max_depth'], n_estimators=state['n_estimators'], random_state=42)
                 model_xgb.fit(X, y_reg)
                 pred_xgb = float(model_xgb.predict(latest_features)[0])
@@ -303,7 +343,6 @@ def main():
                 next_prediction = sum(preds[m] * weights[m] for m in preds)
                 state['last_prediction'] = next_prediction
 
-                # 2. Classificatiemodel (Richtingskans)
                 try:
                     clf_xgb = xgb.XGBClassifier(n_estimators=50, max_depth=3, random_state=42, eval_metric='logloss')
                     clf_xgb.fit(X, y_class)
@@ -312,7 +351,6 @@ def main():
                 except Exception:
                     state['direction_probability'] = 50.0
 
-                # 3. Automatisch Risicobeheer (Stop-Loss & Take-Profit)
                 if next_prediction > current_price:
                     state['stop_loss'] = float(current_price - (1.5 * current_atr))
                     state['take_profit'] = float(current_price + (2.5 * current_atr))
