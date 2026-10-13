@@ -4,6 +4,8 @@ import json
 import os
 import subprocess
 import time
+import gc
+import urllib.request
 import numpy as np
 import pandas as pd
 import yfinance as yf
@@ -14,10 +16,10 @@ from sklearn.ensemble import RandomForestRegressor
 
 assets = ['BTC', 'ETH', 'LINK']
 
-# Tijdsframes met minimale seconden tussen trainingen om onnodig herberekenen te voorkomen
+# Tijdsframes met geoptimaliseerde periodes om RAM-pieken op Render te voorkomen
 timeframes = {
     '15m': {'interval': '15m', 'period': '59d', 'horizon': 1, 'min_interval_seconds': 14 * 60},
-    '1h': {'interval': '1h', 'period': '730d', 'horizon': 1, 'min_interval_seconds': 55 * 60},
+    '1h': {'interval': '1h', 'period': '365d', 'horizon': 1, 'min_interval_seconds': 55 * 60},
     '1d': {'interval': '1d', 'period': '730d', 'horizon': 1, 'min_interval_seconds': 23 * 3600},
     '1w': {'interval': '1wk', 'period': '730d', 'horizon': 1, 'min_interval_seconds': 6 * 86400},
     '1m': {'interval': '1mo', 'period': 'max', 'horizon': 1, 'min_interval_seconds': 25 * 86400},
@@ -34,14 +36,20 @@ base_features = [
     'bb_position',
     'OBV_slope',
     'VWAP_dist',
-    'Supertrend_dist'  # Vaste basisfeature
+    'Supertrend_dist', # Vaste basisfeature
+    'macro_trend'      # Multitimeframe macro trend context
 ]
 
 optional_features = [
     'MACD_hist',
     'ADX',
     'CMF',
-    'ATR_percentile'
+    'ATR_percentile',
+    'regime_score',     # Market Regime (Trend vs Chop)
+    'smc_zone_dist',    # Smart Money Concepts / Order Blocks (zonder lek)
+    'lorentzian_dist',  # Lorentzian patroonafstand (zonder lek)
+    'oi_change',        # Open Interest % verandering (Binance Futures)
+    'dist_oi_sma'       # Afstand tot Open Interest SMA
 ]
 
 def load_or_init_state(state_file):
@@ -140,16 +148,64 @@ def fetch_data_safely(ticker, tf_info):
             'Close': 'close',
             'Volume': 'volume'
         })
-        df['Date'] = pd.to_datetime(df['Date'])
+        df['Date'] = pd.to_datetime(df['Date']).dt.tz_localize(None)
         df.set_index('Date', inplace=True)
-        return df.reset_index(drop=True)
+        return df.reset_index(drop=False)
     except Exception as e:
         print(f"[{ticker}] Fout bij ophalen data: {e}")
         return pd.DataFrame()
 
+def fetch_binance_open_interest(asset):
+    """Haalt historische Open Interest data op via Binance Futures API."""
+    try:
+        symbol = f"{asset}USDT"
+        url = f"https://fapi.binance.com/futures/data/openInterestHist?symbol={symbol}&period=1h&limit=100"
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=5) as response:
+            data = json.loads(response.read().decode())
+            if isinstance(data, list) and len(data) > 0:
+                df_oi = pd.DataFrame(data)
+                df_oi['timestamp'] = pd.to_datetime(df_oi['timestamp'], unit='ms').dt.tz_localize(None)
+                df_oi['sumOpenInterest'] = df_oi['sumOpenInterest'].astype(float)
+                df_oi = df_oi.sort_values('timestamp').reset_index(drop=True)
+                return df_oi[['timestamp', 'sumOpenInterest']]
+    except Exception:
+        pass
+    return pd.DataFrame()
+
+def merge_price_and_oi(df_prices, df_oi):
+    if df_oi.empty:
+        df_prices['oi_change'] = 0.0
+        df_prices['dist_oi_sma'] = 0.0
+        return df_prices
+
+    df_prices = df_prices.sort_values('Date')
+    df_oi = df_oi.sort_values('timestamp')
+
+    df_merged = pd.merge_asof(
+        df_prices, 
+        df_oi, 
+        left_on='Date', 
+        right_on='timestamp', 
+        direction='backward' # Kijkt terug in de tijd, voorkomt data leakage!
+    )
+    
+    df_merged['sumOpenInterest'] = df_merged['sumOpenInterest'].ffill().fillna(0.0)
+    df_merged['oi_change'] = df_merged['sumOpenInterest'].pct_change().fillna(0.0)
+    df_merged['oi_sma'] = df_merged['sumOpenInterest'].rolling(window=20, min_periods=1).mean()
+    df_merged['dist_oi_sma'] = ((df_merged['sumOpenInterest'] - df_merged['oi_sma']) / (df_merged['oi_sma'] + 1e-8)).fillna(0.0)
+    
+    if 'timestamp' in df_merged.columns:
+        df_merged.drop(columns=['timestamp'], inplace=True)
+    if 'oi_sma' in df_merged.columns:
+        df_merged.drop(columns=['oi_sma'], inplace=True)
+        
+    return df_merged
+
 def push_to_github():
     github_token = os.environ.get('GITHUB_TOKEN')
     if not github_token:
+        print("[GitHub] Waarschuwing: GITHUB_TOKEN ontbreekt in Render environment variables!")
         return
     try:
         repo_url = f'https://{github_token}@github.com/robair2000/predictor.git'
@@ -159,14 +215,17 @@ def push_to_github():
 
         status = subprocess.run(['git', 'status', '--porcelain'], capture_output=True, text=True, check=True)
         if not status.stdout.strip():
+            print("[GitHub] Geen gewijzigde .json bestanden gevonden om te pushen.")
             return
 
         subprocess.run(['git', 'commit', '-m', 'Auto-update Smart Evolutionary Ensemble [skip ci]'], check=True)
         branch_res = subprocess.run(['git', 'branch', '--show-current'], capture_output=True, text=True, check=True)
         current_branch = branch_res.stdout.strip() or 'main'
+        
         subprocess.run(['git', 'push', '--force', repo_url, f'HEAD:{current_branch}'], capture_output=True, check=True)
-    except Exception:
-        pass
+        print(f"[GitHub] Succesvol gepusht naar branch {current_branch}!")
+    except Exception as e:
+        print(f"[GitHub] Fout opgetreden tijdens GitHub push: {e}")
 
 def main():
     print("--- Smart Evolutionary Ensemble Quant Worker gestart ---")
@@ -174,6 +233,8 @@ def main():
     
     for asset in assets:
         ticker = f'{asset}-USD'
+        df_oi = fetch_binance_open_interest(asset)
+
         for tf_name, tf_info in timeframes.items():
             state_file = f'model_state_{asset.lower()}_{tf_name}.json'
             try:
@@ -187,7 +248,7 @@ def main():
                 if df is None or df.empty or len(df) < 60:
                     continue
 
-                # Standaard indicatoren
+                # 1. Technische Indicatoren & Basisfeatures
                 df['SMA_20'] = df['close'].rolling(window=20).mean()
                 df['SMA_50'] = df['close'].rolling(window=50).mean()
                 df['EMA_9'] = df['close'].ewm(span=9, adjust=False).mean()
@@ -224,36 +285,45 @@ def main():
                 vwap = (df['volume'] * typical_price).cumsum() / (df['volume'].cumsum() + 1e-8)
                 df['VWAP_dist'] = (df['close'] - vwap) / vwap
 
-                # Supertrend berekening
+                # Supersnelle vectoriële Supertrend
                 hl2 = (df['high'] + df['low']) / 2
-                basic_upper = hl2 + (3.0 * df['ATR'])
-                basic_lower = hl2 - (3.0 * df['ATR'])
+                atr3 = 3.0 * df['ATR']
+                basic_upper = hl2 + atr3
+                basic_lower = hl2 - atr3
                 
-                final_upper = basic_upper.copy()
-                final_lower = basic_lower.copy()
-                trend = pd.Series(1, index=df.index)
-                supertrend = pd.Series(0.0, index=df.index)
+                upper_val = basic_upper.to_numpy(copy=True)
+                lower_val = basic_lower.to_numpy(copy=True)
+                close_val = df['close'].to_numpy(copy=True)
+                f_upper = basic_upper.to_numpy(copy=True)
+                f_lower = basic_lower.to_numpy(copy=True)
+                t_arr = np.ones(len(df), dtype=int)
+                
+                upper_val.flags.writeable = True
+                lower_val.flags.writeable = True
+                close_val.flags.writeable = True
+                f_upper.flags.writeable = True
+                f_lower.flags.writeable = True
+                t_arr.flags.writeable = True
                 
                 for i in range(1, len(df)):
-                    if basic_upper.iloc[i] < final_upper.iloc[i-1] or df['close'].iloc[i-1] > final_upper.iloc[i-1]:
-                        final_upper.iloc[i] = basic_upper.iloc[i]
+                    if np.isnan(upper_val[i]) or np.isnan(f_upper[i-1]):
+                        continue
+                    if upper_val[i] < f_upper[i-1] or close_val[i-1] > f_upper[i-1]:
+                        f_upper[i] = upper_val[i]
                     else:
-                        final_upper.iloc[i] = final_upper.iloc[i-1]
-                        
-                    if basic_lower.iloc[i] > final_lower.iloc[i-1] or df['close'].iloc[i-1] < final_lower.iloc[i-1]:
-                        final_lower.iloc[i] = basic_lower.iloc[i]
+                        f_upper[i] = f_upper[i-1]
+                    if lower_val[i] > f_lower[i-1] or close_val[i-1] < f_lower[i-1]:
+                        f_lower[i] = lower_val[i]
                     else:
-                        final_lower.iloc[i] = final_lower.iloc[i-1]
-                        
-                    if df['close'].iloc[i] > final_upper.iloc[i-1]:
-                        trend.iloc[i] = 1
-                    elif df['close'].iloc[i] < final_lower.iloc[i-1]:
-                        trend.iloc[i] = -1
+                        f_lower[i] = f_lower[i-1]
+                    if close_val[i] > f_upper[i-1]:
+                        t_arr[i] = 1
+                    elif close_val[i] < f_lower[i-1]:
+                        t_arr[i] = -1
                     else:
-                        trend.iloc[i] = trend.iloc[i-1]
+                        t_arr[i] = t_arr[i-1]
                         
-                    supertrend.iloc[i] = final_lower.iloc[i] if trend.iloc[i] == 1 else final_upper.iloc[i]
-                    
+                supertrend = np.where(t_arr == 1, f_lower, f_upper)
                 df['Supertrend_dist'] = (df['close'] - supertrend) / (df['close'] + 1e-8)
 
                 # Optionele indicatoren
@@ -278,6 +348,33 @@ def main():
                 df['CMF'] = mf_volume.rolling(window=20).sum() / (df['volume'].rolling(window=20).sum() + 1e-8)
 
                 df['ATR_percentile'] = df['ATR'].rolling(window=100).apply(lambda x: pd.Series(x).rank(pct=True).iloc[-1], raw=False)
+
+                # 2. Multitimeframe (MTF) Macro Trend
+                macro_ema = df['close'].ewm(span=200, adjust=False).mean()
+                df['macro_trend'] = (df['close'] - macro_ema) / (macro_ema + 1e-8)
+
+                # 3. Market Regime & Leakage-Free Features
+                adx_val = df['ADX'] if 'ADX' in df.columns else dx.rolling(window=14).mean()
+                df['regime_score'] = (adx_val / 100.0) * (1.0 - df['atr_ratio'] / (df['atr_ratio'].rolling(20).mean() + 1e-8))
+
+                body_size = (df['close'] - df['open']).abs()
+                avg_body = body_size.shift(1).rolling(20).mean()
+                is_order_block = body_size.shift(1) > (2.0 * avg_body)
+                recent_ob_price = np.where(is_order_block, (df['high'].shift(1) + df['low'].shift(1)) / 2, np.nan)
+                df['smc_zone_dist'] = (df['close'] - pd.Series(recent_ob_price).ffill()) / (df['close'] + 1e-8)
+                df['smc_zone_dist'] = df['smc_zone_dist'].fillna(0)
+
+                rolling_max = df['high'].shift(1).rolling(10).max()
+                rolling_min = df['low'].shift(1).rolling(10).min()
+                mid_range = (rolling_max + rolling_min) / 2
+                df['lorentzian_dist'] = (df['close'] - mid_range) / (rolling_max - rolling_min + 1e-8)
+                df['lorentzian_dist'] = df['lorentzian_dist'].fillna(0)
+
+                # 4. Open Interest Integratie via jouw geavanceerde merge functie
+                df = merge_price_and_oi(df, df_oi)
+
+                # Schoon alle kolommen op tegen oneindige waardes of NaNs
+                df = df.replace([np.inf, -np.inf], np.nan).fillna(0)
 
                 current_price = float(df['close'].iloc[-1])
                 current_atr = float(df['ATR'].iloc[-1]) if not np.isnan(df['ATR'].iloc[-1]) else (current_price * 0.02)
@@ -351,6 +448,7 @@ def main():
                 with open(state_file, 'w', encoding='utf-8') as f:
                     json.dump(state, f, indent=4)
 
+                gc.collect()
                 time.sleep(1)
             except Exception as e:
                 print(f"Fout bij {asset} {tf_name}: {e}")
