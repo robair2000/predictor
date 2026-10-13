@@ -1,31 +1,55 @@
 import os
 import time
 import json
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 import ccxt
 
-# --- CONFIGURATIE ---
+# --- RENDER WEB SERVER (VOOR POORT-BINDING) ---
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"OK")
+
+    def log_message(self, format, *args):
+        # Stilhouden om output limieten op Render te vermijden
+        pass
+
+def run_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+    server.serve_forever()
+
+# Start de webserver direct in een daemon-thread op de achtergrond
+server_thread = threading.Thread(target=run_server, daemon=True)
+server_thread.start()
+
+
+# --- CONFIGURATIE TRADING ---
 ASSETS = ['BTC', 'ETH', 'LINK']
 TIMEFRAMES = ['15m', '1h', '1d']
 CHECK_INTERVAL_SECONDS = 900  # Elke 15 minuten controleren
 
-# Stel hier je exchange in (bijv. Binance in Testnet/Sandbox modus)
-exchange = ccxt.binance({
-    'apiKey': os.getenv('BINANCE_TESTNET_API_KEY', 'JOUW_TESTNET_API_KEY'),
-    'secret': os.getenv('BINANCE_TESTNET_SECRET', 'JOUW_TESTNET_SECRET'),
+# Stel KuCoin in via CCXT voor Sandbox (Testnet)
+exchange = ccxt.kucoin({
+    'apiKey': os.getenv('KUCOIN_SANDBOX_API_KEY', 'JOUW_SANDBOX_API_KEY'),
+    'secret': os.getenv('KUCOIN_SANDBOX_SECRET', 'JOUW_SANDBOX_SECRET'),
+    'password': os.getenv('KUCOIN_SANDBOX_PASSWORD', 'JOUW_SANDBOX_PASSPHRASE'), # KuCoin vereist altijd een passphrase
     'enableRateLimit': True,
 })
 
-# Schakel sandbox / testnet in voor 100% veiligheid met nepgeld
+# Schakel de sandbox / testnet modus in voor 100% veiligheid met nepgeld
 exchange.set_sandbox_mode(True)
 
 def execute_paper_trades():
-    print("--- [Paper Trader Worker] Start controle op signalen ---")
+    print("--- [Paper Trader Worker] Start controle op signalen via KuCoin Sandbox ---")
     
     try:
-        # Optioneel: laad actuele marktprijzen
+        # Laad de markten in van de exchange
         exchange.load_markets()
     except Exception as e:
-        print(f"Fout bij verbinden met exchange: {e}")
+        print(f"Fout bij verbinden met KuCoin Sandbox: {e}")
         return
 
     for asset in ASSETS:
@@ -45,7 +69,7 @@ def execute_paper_trades():
                         
                         # Voorbeeld logica: Alleen handelen bij een sterke kans (> 70%)
                         if prob >= 70.0 and last_pred == 1:
-                            print(f"🔥 Sterk KOOP-signaal voor {symbol}! Papier-order plaatsen...")
+                            print(f"🔥 Sterk KOOP-signaal voor {symbol}! Papier-order plaatsen op KuCoin Sandbox...")
                             
                         elif prob >= 70.0 and last_pred == 0:
                             print(f"🔻 Sterk VERKOOP-signaal voor {symbol}! Papier-order sluiten/shorten...")
@@ -56,7 +80,7 @@ def execute_paper_trades():
                 print(f"Geen state-bestand gevonden voor {asset} ({tf})")
 
 if __name__ == '__main__':
-    print("Paper Trader Worker is gestart en draait 24/7...")
+    print("Paper Trader Worker (KuCoin Sandbox) is gestart en draait 24/7...")
     while True:
         execute_paper_trades()
         # Wacht tot de volgende ronde (bijv. 15 minuten)
