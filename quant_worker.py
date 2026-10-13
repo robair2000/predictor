@@ -34,6 +34,7 @@ base_features = [
     'bb_position',
     'OBV_slope',
     'VWAP_dist'
+    'Supertrend_dist'
 ]
 
 optional_features = [
