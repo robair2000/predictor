@@ -12,6 +12,14 @@ import xgboost as xgb
 import lightgbm as lgb
 from catboost import CatBoostRegressor
 from sklearn.ensemble import RandomForestRegressor
+import logging
+import warnings
+
+# Onderdruk alle standaard waarschuwingen en externe bibliotheek logs
+warnings.filterwarnings('ignore')
+logging.getLogger('yfinance').setLevel(logging.ERROR)
+logging.getLogger('xgboost').setLevel(logging.ERROR)
+logging.getLogger('lightgbm').setLevel(logging.ERROR)
 
 assets = ['BTC', 'ETH', 'LINK']
 
