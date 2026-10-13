@@ -179,7 +179,6 @@ def merge_price_and_oi(df_prices, df_oi):
         df_prices['dist_oi_sma'] = 0.0
         return df_prices
 
-    # Zorg dat beide datakolommen exact hetzelfde datetime64[ms] type hebben om merge-fouten te voorkomen
     df_prices = df_prices.sort_values('Date').copy()
     df_prices['Date'] = pd.to_datetime(df_prices['Date']).astype('datetime64[ms]')
     
@@ -191,7 +190,7 @@ def merge_price_and_oi(df_prices, df_oi):
         df_oi, 
         left_on='Date', 
         right_on='timestamp', 
-        direction='backward' # Kijkt terug in de tijd, voorkomt data leakage!
+        direction='backward'
     )
     
     df_merged['sumOpenInterest'] = df_merged['sumOpenInterest'].ffill().fillna(0.0)
@@ -351,93 +350,16 @@ def main():
                 mf_volume = mf_multiplier * df['volume']
                 df['CMF'] = mf_volume.rolling(window=20).sum() / (df['volume'].rolling(window=20).sum() + 1e-8)
 
-                # 1. Supersnelle vectoriële percentile rank (voorkomt CPU timeouts)
-df['ATR_percentile'] = df['ATR'].rolling(window=100).rank(pct=True)
+                df['ATR_percentile'] = df['ATR'].rolling(window=100).apply(lambda x: pd.Series(x).rank(pct=True).iloc[-1], raw=False)
 
-current_price = float(df['close'].iloc[-1])
-current_atr = float(df['ATR'].iloc[-1]) if not np.isnan(df['ATR'].iloc[-1]) else (current_price * 0.02)
+                # 2. Multitimeframe (MTF) Macro Trend
+                macro_ema = df['close'].ewm(span=200, adjust=False).mean()
+                df['macro_trend'] = (df['close'] - macro_ema) / (macro_ema + 1e-8)
 
-state = evaluate_and_adapt(state, current_price)
-state['last_trained_timestamp'] = current_time
-current_features = state['active_features']
+                # 3. Market Regime & Leakage-Free Features
+                adx_val = df['ADX'] if 'ADX' in df.columns else dx.rolling(window=14).mean()
+                df['regime_score'] = (adx_val / 100.0) * (1.0 - df['atr_ratio'] / (df['atr_ratio'].rolling(20).mean() + 1e-8))
 
-# 2. Waterdichte targets aanmaken in de hoofd-dataframe (voorkomt data alignment-fouten)
-df['target_reg'] = df['close'].shift(-tf_info['horizon'])
-df['target_class'] = (df['target_reg'] > df['close']).astype(int)
-
-# 3. Data opschonen
-df_clean = df.dropna(subset=current_features + ['target_reg']).reset_index(drop=True)
-if df_clean.empty:
-    continue
-
-# 4. Filteren op de dynamische lookback window
-lookback = state['lookback_window']
-df_train = df_clean.tail(lookback)
-
-# 5. Gealigneerde NumPy arrays genereren voor de training (iloc is hierdoor niet meer nodig)
-X = df_train[current_features].values
-y_reg = df_train['target_reg'].values
-y_class = df_train['target_class'].values
-
-# 6. De allernieuwste rij isoleren voor de live voorspelling
-latest_features = df_clean[current_features].iloc[[-1]]
-
-
-                # Modellen trainen
-                model_xgb = xgb.XGBRegressor(learning_rate=state['learning_rate'], max_depth=state['max_depth'], n_estimators=state['n_estimators'], random_state=42)
-                model_xgb.fit(X, y_reg)
-                pred_xgb = float(model_xgb.predict(latest_features)[0])
-
-                model_lgb = lgb.LGBMRegressor(learning_rate=state['learning_rate'], max_depth=state['max_depth'], n_estimators=state['n_estimators'], random_state=42, verbose=-1)
-                model_lgb.fit(X, y_reg)
-                pred_lgb = float(model_lgb.predict(latest_features)[0])
-
-                model_cat = CatBoostRegressor(learning_rate=state['learning_rate'], depth=state['max_depth'], iterations=state['n_estimators'], random_seed=42, verbose=0)
-                model_cat.fit(X, y_reg)
-                pred_cat = float(model_cat.predict(latest_features)[0])
-
-                model_rf = RandomForestRegressor(n_estimators=50, max_depth=state['max_depth'], random_state=42, n_jobs=-1)
-                model_rf.fit(X, y_reg)
-                pred_rf = float(model_rf.predict(latest_features)[0])
-
-                preds = {
-                    'xgb': pred_xgb,
-                    'lgb': pred_lgb,
-                    'cat': pred_cat,
-                    'rf': pred_rf
-                }
-
-                state = update_dynamic_weights(state, preds, current_price)
-                weights = state['model_weights']
-
-                next_prediction = sum(preds[m] * weights[m] for m in preds)
-                state['last_prediction'] = next_prediction
-
-                try:
-                    clf_xgb = xgb.XGBClassifier(n_estimators=50, max_depth=3, random_state=42, eval_metric='logloss')
-                    clf_xgb.fit(X, y_class)
-                    prob = clf_xgb.predict_proba(latest_features)[0][1]
-                    state['direction_probability'] = float(prob * 100)
-                except Exception:
-                    state['direction_probability'] = 50.0
-
-                if next_prediction > current_price:
-                    state['stop_loss'] = float(current_price - (1.5 * current_atr))
-                    state['take_profit'] = float(current_price + (2.5 * current_atr))
-                else:
-                    state['stop_loss'] = float(current_price + (1.5 * current_atr))
-                    state['take_profit'] = float(current_price - (2.5 * current_atr))
-
-                with open(state_file, 'w', encoding='utf-8') as f:
-                    json.dump(state, f, indent=4)
-
-                gc.collect()
-                time.sleep(1)
-            except Exception as e:
-                print(f"Fout bij {asset} {tf_name}: {e}")
-
-    push_to_github()
-    print("--- Smart Evolutionary Ensemble Quant Worker voltooid ---")
-
-if __name__ == '__main__':
-    main()
+                body_size = (df['close'] - df['open']).abs()
+                avg_body = body_size.shift(1).rolling(20).mean()
+                is_order_block = body_size.shift(1) > (2.0 * avg_body)
