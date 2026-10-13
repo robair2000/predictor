@@ -46,8 +46,6 @@ def execute_paper_trades():
                         # Voorbeeld logica: Alleen handelen bij een sterke kans (> 70%)
                         if prob >= 70.0 and last_pred == 1:
                             print(f"🔥 Sterk KOOP-signaal voor {symbol}! Papier-order plaatsen...")
-                            # Hier plaats je eventueel je CCXT testnet order logica:
-                            # order = exchange.create_market_buy_order(symbol, hoeveelheid)
                             
                         elif prob >= 70.0 and last_pred == 0:
                             print(f"🔻 Sterk VERKOOP-signaal voor {symbol}! Papier-order sluiten/shorten...")
