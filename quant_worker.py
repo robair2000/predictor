@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import time
+import gc
 import numpy as np
 import pandas as pd
 import yfinance as yf
@@ -14,10 +15,10 @@ from sklearn.ensemble import RandomForestRegressor
 
 assets = ['BTC', 'ETH', 'LINK']
 
-# Tijdsframes met minimale seconden tussen trainingen om onnodig herberekenen te voorkomen
+# Tijdsframes met geoptimaliseerde periodes om RAM-pieken op Render te voorkomen
 timeframes = {
     '15m': {'interval': '15m', 'period': '59d', 'horizon': 1, 'min_interval_seconds': 14 * 60},
-    '1h': {'interval': '1h', 'period': '730d', 'horizon': 1, 'min_interval_seconds': 55 * 60},
+    '1h': {'interval': '1h', 'period': '365d', 'horizon': 1, 'min_interval_seconds': 55 * 60},
     '1d': {'interval': '1d', 'period': '730d', 'horizon': 1, 'min_interval_seconds': 23 * 3600},
     '1w': {'interval': '1wk', 'period': '730d', 'horizon': 1, 'min_interval_seconds': 6 * 86400},
     '1m': {'interval': '1mo', 'period': 'max', 'horizon': 1, 'min_interval_seconds': 25 * 86400},
@@ -37,11 +38,15 @@ base_features = [
     'Supertrend_dist'  # Vaste basisfeature
 ]
 
+# Uitbreiding van optionele features met alle geavanceerde institutionele wensen tegelijk
 optional_features = [
     'MACD_hist',
     'ADX',
     'CMF',
-    'ATR_percentile'
+    'ATR_percentile',
+    'regime_score',     # 1. Market Regime (Trend vs Chop)
+    'smc_zone_dist',    # 2. Smart Money Concepts / Order Blocks afstand
+    'lorentzian_dist'   # 3. KNN / Lorentzian-achtige patroonafstand
 ]
 
 def load_or_init_state(state_file):
@@ -150,6 +155,7 @@ def fetch_data_safely(ticker, tf_info):
 def push_to_github():
     github_token = os.environ.get('GITHUB_TOKEN')
     if not github_token:
+        print("[GitHub] Waarschuwing: GITHUB_TOKEN ontbreekt in Render environment variables!")
         return
     try:
         repo_url = f'https://{github_token}@github.com/robair2000/predictor.git'
@@ -159,14 +165,17 @@ def push_to_github():
 
         status = subprocess.run(['git', 'status', '--porcelain'], capture_output=True, text=True, check=True)
         if not status.stdout.strip():
+            print("[GitHub] Geen gewijzigde .json bestanden gevonden om te pushen.")
             return
 
         subprocess.run(['git', 'commit', '-m', 'Auto-update Smart Evolutionary Ensemble [skip ci]'], check=True)
         branch_res = subprocess.run(['git', 'branch', '--show-current'], capture_output=True, text=True, check=True)
         current_branch = branch_res.stdout.strip() or 'main'
+        
         subprocess.run(['git', 'push', '--force', repo_url, f'HEAD:{current_branch}'], capture_output=True, check=True)
-    except Exception:
-        pass
+        print(f"[GitHub] Succesvol gepusht naar branch {current_branch}!")
+    except Exception as e:
+        print(f"[GitHub] Fout opgetreden tijdens GitHub push: {e}")
 
 def main():
     print("--- Smart Evolutionary Ensemble Quant Worker gestart ---")
@@ -224,13 +233,12 @@ def main():
                 vwap = (df['volume'] * typical_price).cumsum() / (df['volume'].cumsum() + 1e-8)
                 df['VWAP_dist'] = (df['close'] - vwap) / vwap
 
-               # Supersnelle vectoriële Supertrend berekening (met schrijfbare arrays)
+                # Supersnelle vectoriële Supertrend berekening
                 hl2 = (df['high'] + df['low']) / 2
                 atr3 = 3.0 * df['ATR']
                 basic_upper = hl2 + atr3
                 basic_lower = hl2 - atr3
                 
-                # Zorg dat de numpy arrays expliciet schrijfbaar zijn om read-only errors te voorkomen
                 upper_val = basic_upper.to_numpy(copy=True)
                 lower_val = basic_lower.to_numpy(copy=True)
                 close_val = df['close'].to_numpy(copy=True)
@@ -238,6 +246,13 @@ def main():
                 f_upper = basic_upper.to_numpy(copy=True)
                 f_lower = basic_lower.to_numpy(copy=True)
                 t_arr = np.ones(len(df), dtype=int)
+                
+                upper_val.flags.writeable = True
+                lower_val.flags.writeable = True
+                close_val.flags.writeable = True
+                f_upper.flags.writeable = True
+                f_lower.flags.writeable = True
+                t_arr.flags.writeable = True
                 
                 for i in range(1, len(df)):
                     if np.isnan(upper_val[i]) or np.isnan(f_upper[i-1]):
@@ -263,7 +278,7 @@ def main():
                 supertrend = np.where(t_arr == 1, f_lower, f_upper)
                 df['Supertrend_dist'] = (df['close'] - supertrend) / (df['close'] + 1e-8)
 
-                # Optionele indicatoren
+                # Standaard optionele indicatoren
                 ema_12 = df['close'].ewm(span=12, adjust=False).mean()
                 ema_26 = df['close'].ewm(span=26, adjust=False).mean()
                 macd_line = ema_12 - ema_26
@@ -285,6 +300,30 @@ def main():
                 df['CMF'] = mf_volume.rolling(window=20).sum() / (df['volume'].rolling(window=20).sum() + 1e-8)
 
                 df['ATR_percentile'] = df['ATR'].rolling(window=100).apply(lambda x: pd.Series(x).rank(pct=True).iloc[-1], raw=False)
+
+                # ==========================================
+                # GEAVANCEERDE MODulaire FEATURES TOEVOEGEN
+                # ==========================================
+                
+                # 1. Market Regime Detection (Trend vs Range)
+                adx_val = df['ADX'] if 'ADX' in df.columns else dx.rolling(window=14).mean()
+                df['regime_score'] = (adx_val / 100.0) * (1.0 - df['atr_ratio'] / (df['atr_ratio'].rolling(20).mean() + 1e-8))
+
+                # 2. Smart Money Concepts (SMC) - Afstand tot recente grote wick-zones (Order Blocks)
+                body_size = (df['close'] - df['open']).abs()
+                avg_body = body_size.rolling(20).mean()
+                is_order_block = body_size > (2.0 * avg_body)
+                recent_ob_price = np.where(is_order_block, (df['high'] + df['low']) / 2, np.nan)
+                df['smc_zone_dist'] = (df['close'] - pd.Series(recent_ob_price).ffill()) / (df['close'] + 1e-8)
+                df['smc_zone_dist'] = df['smc_zone_dist'].fillna(0)
+
+                # 3. Lorentzian / KNN-achtige afstand tot lokale toppen en bodems
+                rolling_max = df['high'].rolling(10).max()
+                rolling_min = df['low'].rolling(10).min()
+                mid_range = (rolling_max + rolling_min) / 2
+                df['lorentzian_dist'] = (df['close'] - mid_range) / (rolling_max - rolling_min + 1e-8)
+
+                # ==========================================
 
                 current_price = float(df['close'].iloc[-1])
                 current_atr = float(df['ATR'].iloc[-1]) if not np.isnan(df['ATR'].iloc[-1]) else (current_price * 0.02)
@@ -357,6 +396,9 @@ def main():
 
                 with open(state_file, 'w', encoding='utf-8') as f:
                     json.dump(state, f, indent=4)
+
+                # Geheugen direct opruimen per iteratie
+                gc.collect()
 
                 time.sleep(1)
             except Exception as e:
