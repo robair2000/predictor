@@ -3,7 +3,21 @@ import sys
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
-# --- MINI WEBSERVER VOOR RENDER HEALTH CHECKS (DIRECT ALS EERSTE) ---
+# --- HARDCORE OS-NIVEAU OUTPUT ONDERDRUKKING (DIRECT ALS EERSTE) ---
+def suppress_output():
+    try:
+        sys.stdout.flush()
+        sys.stderr.flush()
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull, 1)
+        os.dup2(devnull, 2)
+        os.close(devnull)
+    except Exception:
+        pass
+
+suppress_output()
+
+# --- MINI WEBSERVER VOOR RENDER HEALTH CHECKS ---
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -22,23 +36,8 @@ def start_web_server():
     except Exception:
         pass
 
-# Start de webserver direct op de achtergrond
 server_thread = threading.Thread(target=start_web_server, daemon=True)
 server_thread.start()
-
-# --- HARDCORE OS-NIVEAU OUTPUT ONDERDRUKKING ---
-def suppress_output():
-    try:
-        sys.stdout.flush()
-        sys.stderr.flush()
-        devnull = os.open(os.devnull, os.O_WRONLY)
-        os.dup2(devnull, 1)
-        os.dup2(devnull, 2)
-        os.close(devnull)
-    except Exception:
-        pass
-
-suppress_output()
 
 import warnings
 warnings.filterwarnings('ignore', category=UserWarning)
@@ -55,8 +54,8 @@ from sklearn.ensemble import RandomForestRegressor
 import logging
 
 warnings.filterwarnings('ignore')
-logging.getLogger('yfinance').setLevel(logging.ERROR)
-logging.getLogger('xgboost').setLevel(logging.ERROR)
+logging.getLogger('yfinance').setLevel(logging.CRITICAL)
+logging.getLogger('xgboost').setLevel(logging.CRITICAL)
 
 assets = ['BTC', 'ETH', 'LINK']
 
@@ -95,41 +94,44 @@ optional_features = [
 def load_or_init_state(state_file):
     models = ['xgb', 'cat', 'rf']
     if os.path.exists(state_file):
-        with open(state_file, 'r', encoding='utf-8') as f:
-            state = json.load(f)
-            state.setdefault('search_direction', 1)
-            state.setdefault('lookback_window', 150)
-            state.setdefault('active_features', base_features.copy())
-            state.setdefault('last_trained_timestamp', 0)
-            
-            if 'model_weights' not in state:
-                state['model_weights'] = {}
-            if 'model_errors' not in state:
-                state['model_errors'] = {}
-            
-            initial_weight = 1.0 / len(models)
-            for m in models:
-                state['model_weights'].setdefault(m, initial_weight)
-                state['model_errors'].setdefault(m, float('inf'))
-            return state
-    else:
-        initial_weight = 1.0 / len(models)
-        return {
-            'learning_rate': 0.05,
-            'max_depth': 5,
-            'n_estimators': 100,
-            'baseline_error': float('inf'),
-            'last_prediction': None,
-            'search_direction': 1,
-            'lookback_window': 150,
-            'active_features': base_features.copy(),
-            'last_trained_timestamp': 0,
-            'model_weights': {m: initial_weight for m in models},
-            'model_errors': {m: float('inf') for m in models},
-            'direction_probability': 50.0,
-            'stop_loss': 0.0,
-            'take_profit': 0.0
-        }
+        try:
+            with open(state_file, 'r', encoding='utf-8') as f:
+                state = json.load(f)
+                state.setdefault('search_direction', 1)
+                state.setdefault('lookback_window', 150)
+                state.setdefault('active_features', base_features.copy())
+                state.setdefault('last_trained_timestamp', 0)
+                
+                if 'model_weights' not in state:
+                    state['model_weights'] = {}
+                if 'model_errors' not in state:
+                    state['model_errors'] = {}
+                
+                initial_weight = 1.0 / len(models)
+                for m in models:
+                    state['model_weights'].setdefault(m, initial_weight)
+                    state['model_errors'].setdefault(m, float('inf'))
+                return state
+        except Exception:
+            pass
+
+    initial_weight = 1.0 / len(models)
+    return {
+        'learning_rate': 0.05,
+        'max_depth': 5,
+        'n_estimators': 100,
+        'baseline_error': float('inf'),
+        'last_prediction': None,
+        'search_direction': 1,
+        'lookback_window': 150,
+        'active_features': base_features.copy(),
+        'last_trained_timestamp': 0,
+        'model_weights': {m: initial_weight for m in models},
+        'model_errors': {m: float('inf') for m in models},
+        'direction_probability': 50.0,
+        'stop_loss': 0.0,
+        'take_profit': 0.0
+    }
 
 def evaluate_and_adapt(state, current_price):
     if state['last_prediction'] is not None:
