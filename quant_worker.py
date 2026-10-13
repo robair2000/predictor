@@ -179,8 +179,12 @@ def merge_price_and_oi(df_prices, df_oi):
         df_prices['dist_oi_sma'] = 0.0
         return df_prices
 
-    df_prices = df_prices.sort_values('Date')
-    df_oi = df_oi.sort_values('timestamp')
+    # Zorg dat beide datakolommen exact hetzelfde datetime64[ms] type hebben om merge-fouten te voorkomen
+    df_prices = df_prices.sort_values('Date').copy()
+    df_prices['Date'] = pd.to_datetime(df_prices['Date']).astype('datetime64[ms]')
+    
+    df_oi = df_oi.sort_values('timestamp').copy()
+    df_oi['timestamp'] = pd.to_datetime(df_oi['timestamp']).astype('datetime64[ms]')
 
     df_merged = pd.merge_asof(
         df_prices, 
