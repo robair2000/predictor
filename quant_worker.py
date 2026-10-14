@@ -11,6 +11,22 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
+import json
+import subprocess
+import time
+import gc
+import numpy as np
+import pandas as pd
+import yfinance as yf
+import xgboost as xgb
+from catboost import CatBoostRegressor
+from sklearn.ensemble import RandomForestRegressor
+import logging
+
+warnings_filter = __import__('warnings')
+warnings_filter.filterwarnings('ignore')
+logging.getLogger('yfinance').setLevel(logging.CRITICAL)
+logging.getLogger('xgboost').setLevel(logging.CRITICAL)
 
 # --- HARDCORE OS-NIVEAU OUTPUT ONDERDRUKKING ---
 def suppress_output():
@@ -26,7 +42,186 @@ def suppress_output():
 
 suppress_output()
 
-# Vooraf declareren van main() zodat de server hem direct kan aanroepen op de achtergrond
+assets = ['BTC', 'ETH', 'LINK']
+
+timeframes = {
+    '15m': {'interval': '15m', 'period': '59d', 'horizon': 1, 'min_interval_seconds': 14 * 60},
+    '1h': {'interval': '1h', 'period': '365d', 'horizon': 1, 'min_interval_seconds': 55 * 60},
+    '1d': {'interval': '1d', 'period': '365d', 'horizon': 1, 'min_interval_seconds': 23 * 3600},
+    '1w': {'interval': '1wk', 'period': '365d', 'horizon': 1, 'min_interval_seconds': 6 * 86400},
+    '1m': {'interval': '1mo', 'period': '365d', 'horizon': 1, 'min_interval_seconds': 25 * 86400},
+}
+
+base_features = [
+    'return_1', 'dist_sma20', 'dist_sma50', 'dist_ema9', 'dist_ema21',
+    'RSI', 'atr_ratio', 'bb_position', 'OBV_slope', 'VWAP_dist', 'Supertrend_dist'
+]
+
+optional_features = [
+    'MACD_hist', 'ADX', 'CMF', 'ATR_percentile', 'regime_score', 'smc_zone_dist', 'lorentzian_dist'
+]
+
+def get_market_regime(df):
+    try:
+        if 'ADX' in df.columns and not pd.isna(df['ADX'].iloc[-1]):
+            last_adx = df['ADX'].iloc[-1]
+            return 'trending' if last_adx > 25 else 'sideways'
+    except Exception:
+        pass
+    return 'sideways'
+
+def load_or_init_state(state_file):
+    models = ['xgb', 'cat', 'rf']
+    if os.path.exists(state_file):
+        try:
+            with open(state_file, 'r', encoding='utf-8') as f:
+                state = json.load(f)
+                state.setdefault('search_direction', 1)
+                state.setdefault('lookback_window', 150)
+                state.setdefault('active_features', base_features.copy())
+                state.setdefault('last_trained_timestamp', 0)
+                state.setdefault('current_regime', 'sideways')
+                
+                if 'regime_features' not in state or not isinstance(state['regime_features'], dict):
+                    state['regime_features'] = {
+                        'trending': base_features.copy(),
+                        'sideways': base_features.copy()
+                    }
+                else:
+                    state['regime_features'].setdefault('trending', base_features.copy())
+                    state['regime_features'].setdefault('sideways', base_features.copy())
+                
+                if 'model_weights' not in state:
+                    state['model_weights'] = {}
+                if 'model_errors' not in state:
+                    state['model_errors'] = {}
+                
+                initial_weight = 1.0 / len(models)
+                for m in models:
+                    state['model_weights'].setdefault(m, initial_weight)
+                    state['model_errors'].setdefault(m, float('inf'))
+                return state
+        except Exception:
+            pass
+
+    initial_weight = 1.0 / len(models)
+    return {
+        'learning_rate': 0.05,
+        'max_depth': 4,
+        'n_estimators': 50,
+        'baseline_error': float('inf'),
+        'last_prediction': None,
+        'search_direction': 1,
+        'lookback_window': 150,
+        'current_regime': 'sideways',
+        'regime_features': {
+            'trending': base_features.copy(),
+            'sideways': base_features.copy()
+        },
+        'active_features': base_features.copy(),
+        'last_trained_timestamp': 0,
+        'model_weights': {m: initial_weight for m in models},
+        'model_errors': {m: float('inf') for m in models},
+        'direction_probability': 50.0,
+        'stop_loss': 0.0,
+        'take_profit': 0.0
+    }
+
+def evaluate_and_adapt(state, current_price, current_regime):
+    if state['last_prediction'] is not None:
+        error = abs(state['last_prediction'] - current_price)
+        if error < state['baseline_error']:
+            state['baseline_error'] = error
+        else:
+            state['search_direction'] *= -1
+            state['baseline_error'] = error
+
+    step = 0.005 * state['search_direction']
+    state['learning_rate'] = float(np.clip(state['learning_rate'] + step, 0.01, 0.15))
+    
+    window_mutation = np.random.choice([-10, 10])
+    state['lookback_window'] = int(np.clip(state['lookback_window'] + window_mutation, 60, 300))
+
+    if 'regime_features' not in state:
+        state['regime_features'] = {
+            'trending': base_features.copy(),
+            'sideways': base_features.copy()
+        }
+
+    active_feats = state['regime_features'].get(current_regime, base_features.copy())
+
+    if np.random.rand() < 0.3:
+        available_opts = [f for f in optional_features if f not in active_feats]
+        if available_opts and len(active_feats) < (len(base_features) + len(optional_features)):
+            new_feat = np.random.choice(available_opts)
+            active_feats.append(new_feat)
+        elif len(active_feats) > len(base_features):
+            removable_opts = [f for f in active_feats if f in optional_features]
+            if removable_opts:
+                removed = np.random.choice(removable_opts)
+                active_feats = [f for f in active_feats if f != removed]
+
+    state['regime_features'][current_regime] = active_feats
+    state['active_features'] = active_feats
+
+    return state
+
+def update_dynamic_weights(state, preds, current_price):
+    errors = {k: abs(v - current_price) for k, v in preds.items()}
+    state['model_errors'] = errors
+
+    inv_errors = {k: (1.0 / (v + 1e-8)) for k, v in errors.items()}
+    total_inv = sum(inv_errors.values())
+    
+    state['model_weights'] = {k: float(v / total_inv) for k, v in inv_errors.items()}
+    return state
+
+def fetch_data_safely(ticker, tf_info):
+    try:
+        df = yf.download(ticker, period=tf_info['period'], interval=tf_info['interval'], progress=False)
+        if df is None or df.empty:
+            return pd.DataFrame()
+
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+
+        df = df.reset_index()
+        date_col = 'Datetime' if 'Datetime' in df.columns else ('Date' if 'Date' in df.columns else df.columns[0])
+        df = df.rename(columns={
+            date_col: 'Date',
+            'Open': 'open',
+            'High': 'high',
+            'Low': 'low',
+            'Close': 'close',
+            'Volume': 'volume'
+        })
+        df['Date'] = pd.to_datetime(df['Date'])
+        df.set_index('Date', inplace=True)
+        return df.reset_index(drop=True)
+    except Exception:
+        return pd.DataFrame()
+
+def push_to_github():
+    github_token = os.environ.get('GITHUB_TOKEN')
+    if not github_token:
+        return
+    try:
+        repo_url = f'https://{github_token}@github.com/robair2000/predictor.git'
+        
+        with open(os.devnull, 'wb') as devnull:
+            subprocess.run(['git', 'config', 'user.email', 'render-worker@bot.com'], stdout=devnull, stderr=devnull, stdin=subprocess.DEVNULL)
+            subprocess.run(['git', 'config', 'user.name', 'Render Quant Bot'], stdout=devnull, stderr=devnull, stdin=subprocess.DEVNULL)
+            subprocess.run(['git', 'add', '*.json'], stdout=devnull, stderr=devnull, stdin=subprocess.DEVNULL)
+
+            status = subprocess.run(['git', 'status', '--porcelain'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, stdin=subprocess.DEVNULL)
+            if not status.stdout or not status.stdout.strip():
+                return
+
+            subprocess.run(['git', 'commit', '-m', 'Auto-update Smart Evolutionary Ensemble [skip ci]'], stdout=devnull, stderr=devnull, stdin=subprocess.DEVNULL)
+            subprocess.run(['git', 'push', '--force', repo_url, 'HEAD:main'], stdout=devnull, stderr=devnull, stdin=subprocess.DEVNULL)
+    except Exception:
+        pass
+
 def main():
     current_time = time.time()
     
@@ -273,204 +468,6 @@ def start_web_server():
 
 server_thread = threading.Thread(target=start_web_server, daemon=True)
 server_thread.start()
-
-import warnings
-warnings.filterwarnings('ignore', category=UserWarning)
-import json
-import subprocess
-import time
-import gc
-import numpy as np
-import pandas as pd
-import yfinance as yf
-import xgboost as xgb
-from catboost import CatBoostRegressor
-from sklearn.ensemble import RandomForestRegressor
-import logging
-
-warnings.filterwarnings('ignore')
-logging.getLogger('yfinance').setLevel(logging.CRITICAL)
-logging.getLogger('xgboost').setLevel(logging.CRITICAL)
-
-assets = ['BTC', 'ETH', 'LINK']
-
-timeframes = {
-    '15m': {'interval': '15m', 'period': '59d', 'horizon': 1, 'min_interval_seconds': 14 * 60},
-    '1h': {'interval': '1h', 'period': '365d', 'horizon': 1, 'min_interval_seconds': 55 * 60},
-    '1d': {'interval': '1d', 'period': '365d', 'horizon': 1, 'min_interval_seconds': 23 * 3600},
-    '1w': {'interval': '1wk', 'period': '365d', 'horizon': 1, 'min_interval_seconds': 6 * 86400},
-    '1m': {'interval': '1mo', 'period': '365d', 'horizon': 1, 'min_interval_seconds': 25 * 86400},
-}
-
-base_features = [
-    'return_1', 'dist_sma20', 'dist_sma50', 'dist_ema9', 'dist_ema21',
-    'RSI', 'atr_ratio', 'bb_position', 'OBV_slope', 'VWAP_dist', 'Supertrend_dist'
-]
-
-optional_features = [
-    'MACD_hist', 'ADX', 'CMF', 'ATR_percentile', 'regime_score', 'smc_zone_dist', 'lorentzian_dist'
-]
-
-def get_market_regime(df):
-    try:
-        if 'ADX' in df.columns and not pd.isna(df['ADX'].iloc[-1]):
-            last_adx = df['ADX'].iloc[-1]
-            return 'trending' if last_adx > 25 else 'sideways'
-    except Exception:
-        pass
-    return 'sideways'
-
-def load_or_init_state(state_file):
-    models = ['xgb', 'cat', 'rf']
-    if os.path.exists(state_file):
-        try:
-            with open(state_file, 'r', encoding='utf-8') as f:
-                state = json.load(f)
-                state.setdefault('search_direction', 1)
-                state.setdefault('lookback_window', 150)
-                state.setdefault('active_features', base_features.copy())
-                state.setdefault('last_trained_timestamp', 0)
-                state.setdefault('current_regime', 'sideways')
-                
-                if 'regime_features' not in state or not isinstance(state['regime_features'], dict):
-                    state['regime_features'] = {
-                        'trending': base_features.copy(),
-                        'sideways': base_features.copy()
-                    }
-                else:
-                    state['regime_features'].setdefault('trending', base_features.copy())
-                    state['regime_features'].setdefault('sideways', base_features.copy())
-                
-                if 'model_weights' not in state:
-                    state['model_weights'] = {}
-                if 'model_errors' not in state:
-                    state['model_errors'] = {}
-                
-                initial_weight = 1.0 / len(models)
-                for m in models:
-                    state['model_weights'].setdefault(m, initial_weight)
-                    state['model_errors'].setdefault(m, float('inf'))
-                return state
-        except Exception:
-            pass
-
-    initial_weight = 1.0 / len(models)
-    return {
-        'learning_rate': 0.05,
-        'max_depth': 4,
-        'n_estimators': 50,
-        'baseline_error': float('inf'),
-        'last_prediction': None,
-        'search_direction': 1,
-        'lookback_window': 150,
-        'current_regime': 'sideways',
-        'regime_features': {
-            'trending': base_features.copy(),
-            'sideways': base_features.copy()
-        },
-        'active_features': base_features.copy(),
-        'last_trained_timestamp': 0,
-        'model_weights': {m: initial_weight for m in models},
-        'model_errors': {m: float('inf') for m in models},
-        'direction_probability': 50.0,
-        'stop_loss': 0.0,
-        'take_profit': 0.0
-    }
-
-def evaluate_and_adapt(state, current_price, current_regime):
-    if state['last_prediction'] is not None:
-        error = abs(state['last_prediction'] - current_price)
-        if error < state['baseline_error']:
-            state['baseline_error'] = error
-        else:
-            state['search_direction'] *= -1
-            state['baseline_error'] = error
-
-    step = 0.005 * state['search_direction']
-    state['learning_rate'] = float(np.clip(state['learning_rate'] + step, 0.01, 0.15))
-    
-    window_mutation = np.random.choice([-10, 10])
-    state['lookback_window'] = int(np.clip(state['lookback_window'] + window_mutation, 60, 300))
-
-    if 'regime_features' not in state:
-        state['regime_features'] = {
-            'trending': base_features.copy(),
-            'sideways': base_features.copy()
-        }
-
-    active_feats = state['regime_features'].get(current_regime, base_features.copy())
-
-    if np.random.rand() < 0.3:
-        available_opts = [f for f in optional_features if f not in active_feats]
-        if available_opts and len(active_feats) < (len(base_features) + len(optional_features)):
-            new_feat = np.random.choice(available_opts)
-            active_feats.append(new_feat)
-        elif len(active_feats) > len(base_features):
-            removable_opts = [f for f in active_feats if f in optional_features]
-            if removable_opts:
-                removed = np.random.choice(removable_opts)
-                active_feats = [f for f in active_feats if f != removed]
-
-    state['regime_features'][current_regime] = active_feats
-    state['active_features'] = active_feats
-
-    return state
-
-def update_dynamic_weights(state, preds, current_price):
-    errors = {k: abs(v - current_price) for k, v in preds.items()}
-    state['model_errors'] = errors
-
-    inv_errors = {k: (1.0 / (v + 1e-8)) for k, v in errors.items()}
-    total_inv = sum(inv_errors.values())
-    
-    state['model_weights'] = {k: float(v / total_inv) for k, v in inv_errors.items()}
-    return state
-
-def fetch_data_safely(ticker, tf_info):
-    try:
-        df = yf.download(ticker, period=tf_info['period'], interval=tf_info['interval'], progress=False)
-        if df is None or df.empty:
-            return pd.DataFrame()
-
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
-
-        df = df.reset_index()
-        date_col = 'Datetime' if 'Datetime' in df.columns else ('Date' if 'Date' in df.columns else df.columns[0])
-        df = df.rename(columns={
-            date_col: 'Date',
-            'Open': 'open',
-            'High': 'high',
-            'Low': 'low',
-            'Close': 'close',
-            'Volume': 'volume'
-        })
-        df['Date'] = pd.to_datetime(df['Date'])
-        df.set_index('Date', inplace=True)
-        return df.reset_index(drop=True)
-    except Exception:
-        return pd.DataFrame()
-
-def push_to_github():
-    github_token = os.environ.get('GITHUB_TOKEN')
-    if not github_token:
-        return
-    try:
-        repo_url = f'https://{github_token}@github.com/robair2000/predictor.git'
-        
-        with open(os.devnull, 'wb') as devnull:
-            subprocess.run(['git', 'config', 'user.email', 'render-worker@bot.com'], stdout=devnull, stderr=devnull, stdin=subprocess.DEVNULL)
-            subprocess.run(['git', 'config', 'user.name', 'Render Quant Bot'], stdout=devnull, stderr=devnull, stdin=subprocess.DEVNULL)
-            subprocess.run(['git', 'add', '*.json'], stdout=devnull, stderr=devnull, stdin=subprocess.DEVNULL)
-
-            status = subprocess.run(['git', 'status', '--porcelain'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, stdin=subprocess.DEVNULL)
-            if not status.stdout or not status.stdout.strip():
-                return
-
-            subprocess.run(['git', 'commit', '-m', 'Auto-update Smart Evolutionary Ensemble [skip ci]'], stdout=devnull, stderr=devnull, stdin=subprocess.DEVNULL)
-            subprocess.run(['git', 'push', '--force', repo_url, 'HEAD:main'], stdout=devnull, stderr=devnull, stdin=subprocess.DEVNULL)
-    except Exception:
-        pass
 
 if __name__ == '__main__':
     while True:
