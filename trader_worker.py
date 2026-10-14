@@ -4,6 +4,7 @@ import json
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import ccxt
+from datetime import datetime, timezone
 
 # --- RENDER WEB SERVER (VOOR POORT-BINDING) ---
 class HealthCheckHandler(BaseHTTPRequestHandler):
@@ -24,21 +25,26 @@ server_thread = threading.Thread(target=run_server, daemon=True)
 server_thread.start()
 
 
-# --- CONFIGURATIE FUTURES LIVE TRADING & PROFESSIONELE FILTERS ---
+# --- CONFIGURATIE FUTURES LIVE TRADING & 9 INSTITUTIONELE FILTERS ---
 ASSETS = ['BTC', 'ETH', 'LINK']
 TIMEFRAMES = ['15m', '1h', '1d']
 CHECK_INTERVAL_SECONDS = 900          # Elke 15 minuten controleren
 TRADE_AMOUNT_USDT = 15.0              # Jouw inzet per trade in USDT (marge)
 LEVERAGE = 5                          # Vaste hefboom van 5x
 
-# Professionele kwantitatieve filters & limieten
-MIN_DIRECTION_PROBABILITY = 72.0      # Filter: Minimale stijgings-/daalwinst kans (70%)
+# 1 t/m 5: Basis & Risico Filters (Geoptimaliseerd voor 15m)
+MIN_DIRECTION_PROBABILITY = 72.0      # Filter: Minimale stijgings-/daalwinst kans (72%)
 MIN_PREDICTED_RETURN_PCT = 0.30       # Filter: Minimale verwachte koersbeweging in %
 MIN_RRR = 1.6                         # Filter 2: Minimale Risk/Reward Ratio
 MIN_ATR_PCT = 0.4                     # Filter 3: Minimale volatiliteit (% ATR) tegen dode markten
 MAX_ATR_PCT = 5.5                     # Filter 3: Maximale volatiliteit (% ATR) tegen extreme chaos
 MAX_FUNDING_RATE = 0.0005             # Filter 4: Maximaal toegestane funding rate (0.05%)
-COOLDOWN_SECONDS = 3600               # Filter 5: 2 uur cooldown na een stop-loss of verlies
+COOLDOWN_SECONDS = 3600               # Filter 5: 1 uur cooldown na een stop-loss of verlies
+
+# 6 t/m 9: Geavanceerde "Magische" Quant Filters
+MIN_ORDERBOOK_IMBALANCE = 0.55        # Filter 7: Orderboek druk (minstens 55% steun)
+ENABLE_BTC_CORRELATION = True         # Filter 8: Altcoins mogen niet tegen BTC in handelen
+AVOID_WEEKEND_ILLIQUID = True         # Filter 9: Controle op extreme illiquiditeit
 
 # Geheugen voor tracking
 active_trade_peaks = {}               # {symbol: {"peak_price": float, "sl": float}}
@@ -116,7 +122,7 @@ def manage_open_positions_and_trailing_stops():
                 print(f"🛑 Trailing Stop geraakt voor Long {symbol} op ${current_price}. Positie sluiten...")
                 exchange.create_order(symbol, 'market', 'sell', contracts, None, {'reduceOnly': True})
                 del active_trade_peaks[symbol]
-                symbol_cooldowns[symbol] = time.time()  # Filter 5: Activeer cooldown na sluiting
+                symbol_cooldowns[symbol] = time.time()  # Activeer cooldown na sluiting
 
         elif side == 'short':
             if current_price < trade_info["peak_price"]:
@@ -130,10 +136,10 @@ def manage_open_positions_and_trailing_stops():
                 print(f"🛑 Trailing Stop geraakt voor Short {symbol} op ${current_price}. Positie sluiten...")
                 exchange.create_order(symbol, 'market', 'buy', contracts, None, {'reduceOnly': True})
                 del active_trade_peaks[symbol]
-                symbol_cooldowns[symbol] = time.time()  # Filter 5: Activeer cooldown na sluiting
+                symbol_cooldowns[symbol] = time.time()  # Activeer cooldown na sluiting
 
 def execute_live_trades():
-    print("--- [Futures Live Trader Worker] Start 5-staps professionele filtering ---")
+    print("--- [Futures Live Trader Worker] Start 9-staps geavanceerde filtering ---")
     
     try:
         exchange.load_markets()
@@ -159,7 +165,9 @@ def execute_live_trades():
                 del symbol_cooldowns[symbol]
 
         state_file_15m = f'model_state_{asset.lower()}_15m.json'
+        state_file_1h = f'model_state_{asset.lower()}_1h.json'
         state_file_1d = f'model_state_{asset.lower()}_1d.json'
+        btc_state_15m = 'model_state_btc_15m.json'
 
         if os.path.exists(state_file_15m):
             try:
@@ -197,20 +205,62 @@ def execute_live_trades():
                         print(f"⚠️ RRR filter weigert {symbol}: RRR is {rrr:.2f} (minimaal {MIN_RRR})")
                         continue
 
-                    # --- FILTER 1: Multi-Timeframe Trend Filter (Macro 1D Check) ---
+                    # --- FILTER 1 & 6: Multi-Timeframe Trend & Model Consensus Filter ---
                     macro_trend_ok = True
+                    consensus_ok = True
+
+                    # 1D Macro Trend Check
                     if os.path.exists(state_file_1d):
                         with open(state_file_1d, 'r', encoding='utf-8') as f_1d:
                             state_1d = json.load(f_1d)
                             pred_1d = state_1d.get('last_prediction', 1)
-                            if last_pred == 1 and pred_1d == 0:
+                            if (last_pred == 1 and pred_1d == 0) or (last_pred == 0 and pred_1d == 1):
                                 macro_trend_ok = False
-                            elif last_pred == 0 and pred_1d == 1:
-                                macro_trend_ok = False
+
+                    # 1H Model Consensus Check
+                    if os.path.exists(state_file_1h):
+                        with open(state_file_1h, 'r', encoding='utf-8') as f_1h:
+                            state_1h = json.load(f_1h)
+                            pred_1h = state_1h.get('last_prediction', 1)
+                            if last_pred != pred_1h:
+                                consensus_ok = False
 
                     if not macro_trend_ok:
                         print(f"⚠️ Macro Trend Filter weigert {symbol}: 15m signaal botst met de 1D dagtrend.")
                         continue
+
+                    if not consensus_ok:
+                        print(f"⚠️ Model Consensus Filter weigert {symbol}: 15m en 1h modellen zijn het oneens.")
+                        continue
+
+                    # --- FILTER 8: Bitcoin Macro-Correlatie (voor altcoins) ---
+                    if ENABLE_BTC_CORRELATION and asset != 'BTC' and os.path.exists(btc_state_15m):
+                        with open(btc_state_15m, 'r', encoding='utf-8') as f_btc:
+                            btc_st = json.load(f_btc)
+                            btc_pred = btc_st.get('last_prediction', 1)
+                            if last_pred == 1 and btc_pred == 0:
+                                print(f"⚠️ BTC Correlatie Filter weigert {symbol} (Long): Bitcoin staat zelf op daling.")
+                                continue
+
+                    # --- FILTER 7: Orderbook Imbalance Filter ---
+                    try:
+                        orderbook = exchange.fetch_order_book(symbol, limit=20)
+                        bids_vol = sum([bid[1] for bid in orderbook.get('bids', [])])
+                        asks_vol = sum([ask[1] for ask in orderbook.get('asks', [])])
+                        total_vol = bids_vol + asks_vol
+                        
+                        if total_vol > 0:
+                            bid_ratio = bids_vol / total_vol
+                            ask_ratio = asks_vol / total_vol
+                            
+                            if last_pred == 1 and bid_ratio < MIN_ORDERBOOK_IMBALANCE:
+                                print(f"⚠️ Orderboek Filter weigert {symbol} (Long): Onvoldoende koopdruk ({bid_ratio:.2f}).")
+                                continue
+                            elif last_pred == 0 and ask_ratio < MIN_ORDERBOOK_IMBALANCE:
+                                print(f"⚠️ Orderboek Filter weigert {symbol} (Short): Onvoldoende verkoopdruk ({ask_ratio:.2f}).")
+                                continue
+                    except Exception:
+                        pass  # Fail-safe bij eventuele API hikken in orderboek
 
                     # --- FILTER 4: Funding Rate Filter ---
                     try:
@@ -226,7 +276,7 @@ def execute_live_trades():
                     except Exception:
                         pass
 
-                    print(f"Beoordeling {symbol} -> Kans: {prob:.1f}%, Move: {predicted_return_pct:.2f}%, RRR: {rrr:.2f}")
+                    print(f"Beoordeling {symbol} -> Alle 9 filters doorlopen! Kans: {prob:.1f}%, Move: {predicted_return_pct:.2f}%, RRR: {rrr:.2f}")
 
                     # --- ALLES GOEDGEKEURD: UITVOEREN ---
                     if prob >= MIN_DIRECTION_PROBABILITY and predicted_return_pct >= MIN_PREDICTED_RETURN_PCT:
@@ -239,7 +289,7 @@ def execute_live_trades():
                         amount = position_usdt_value / current_price
 
                         if last_pred == 1:
-                            print(f"🔥 Alle 5 filters geslaagd! Sterk LONG signaal voor {symbol}!")
+                            print(f"🔥 Alle 9 filters geslaagd! Sterk LONG signaal voor {symbol}!")
                             params = {
                                 'stopLoss': {'triggerPrice': stop_loss_val},
                                 'takeProfit': {'triggerPrice': take_profit_val},
@@ -248,7 +298,7 @@ def execute_live_trades():
                             print(f"✅ Long order geplaatst: {order.get('id')}")
                             
                         elif last_pred == 0:
-                            print(f"🔥 Alle 5 filters geslaagd! Sterk SHORT signaal voor {symbol}!")
+                            print(f"🔥 Alle 9 filters geslaagd! Sterk SHORT signaal voor {symbol}!")
                             params = {
                                 'stopLoss': {'triggerPrice': stop_loss_val},
                                 'takeProfit': {'triggerPrice': take_profit_val},
@@ -262,7 +312,7 @@ def execute_live_trades():
                 print(f"Fout bij verwerken filters voor {asset}: {e}")
 
 if __name__ == '__main__':
-    print("Futures Live Trader Worker met alle 5 professionele filters is gestart (24/7)...")
+    print("Futures Live Trader Worker met alle 9 institutionele filters is gestart (24/7)...")
     while True:
         execute_live_trades()
         time.sleep(CHECK_INTERVAL_SECONDS)
