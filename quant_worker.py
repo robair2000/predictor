@@ -189,20 +189,19 @@ def push_to_github():
         repo_url = f'https://{github_token}@github.com/robair2000/predictor.git'
         
         with open(os.devnull, 'wb') as devnull:
-            subprocess.run(['git', 'config', '--global', 'user.email', 'render-worker@bot.com'], stdout=devnull, stderr=devnull)
-            subprocess.run(['git', 'config', '--global', 'user.name', 'Render Quant Bot'], stdout=devnull, stderr=devnull)
+            subprocess.run(['git', 'config', 'user.email', 'render-worker@bot.com'], stdout=devnull, stderr=devnull)
+            subprocess.run(['git', 'config', 'user.name', 'Render Quant Bot'], stdout=devnull, stderr=devnull)
             subprocess.run(['git', 'add', '*.json'], stdout=devnull, stderr=devnull)
 
+            # Controleer of er iets te committeren valt
             status = subprocess.run(['git', 'status', '--porcelain'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             if not status.stdout or not status.stdout.strip():
                 return
 
             subprocess.run(['git', 'commit', '-m', 'Auto-update Smart Evolutionary Ensemble [skip ci]'], stdout=devnull, stderr=devnull)
             
-            branch_res = subprocess.run(['git', 'branch', '--show-current'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            current_branch = branch_res.stdout.strip() or 'main'
-            
-            subprocess.run(['git', 'push', '--force', repo_url, f'HEAD:{current_branch}'], stdout=devnull, stderr=devnull)
+            # Forceer direct pushen naar de main branch om detached HEAD problemen te omzeilen
+            subprocess.run(['git', 'push', '--force', repo_url, 'HEAD:main'], stdout=devnull, stderr=devnull)
     except Exception:
         pass
 
