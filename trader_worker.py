@@ -32,13 +32,13 @@ TRADE_AMOUNT_USDT = 15.0              # Jouw inzet per trade in USDT (marge)
 LEVERAGE = 5                          # Vaste hefboom van 5x
 
 # Professionele kwantitatieve filters & limieten
-MIN_DIRECTION_PROBABILITY = 70.0      # Filter: Minimale stijgings-/daalwinst kans (70%)
+MIN_DIRECTION_PROBABILITY = 72.0      # Filter: Minimale stijgings-/daalwinst kans (70%)
 MIN_PREDICTED_RETURN_PCT = 0.30       # Filter: Minimale verwachte koersbeweging in %
-MIN_RRR = 1.5                         # Filter 2: Minimale Risk/Reward Ratio
-MIN_ATR_PCT = 0.5                     # Filter 3: Minimale volatiliteit (% ATR) tegen dode markten
-MAX_ATR_PCT = 6.0                     # Filter 3: Maximale volatiliteit (% ATR) tegen extreme chaos
+MIN_RRR = 1.6                         # Filter 2: Minimale Risk/Reward Ratio
+MIN_ATR_PCT = 0.4                     # Filter 3: Minimale volatiliteit (% ATR) tegen dode markten
+MAX_ATR_PCT = 5.5                     # Filter 3: Maximale volatiliteit (% ATR) tegen extreme chaos
 MAX_FUNDING_RATE = 0.0005             # Filter 4: Maximaal toegestane funding rate (0.05%)
-COOLDOWN_SECONDS = 1800               # Filter 5: 2 uur cooldown na een stop-loss of verlies
+COOLDOWN_SECONDS = 3600               # Filter 5: 2 uur cooldown na een stop-loss of verlies
 
 # Geheugen voor tracking
 active_trade_peaks = {}               # {symbol: {"peak_price": float, "sl": float}}
