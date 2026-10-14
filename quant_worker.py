@@ -76,6 +76,15 @@ optional_features = [
     'MACD_hist', 'ADX', 'CMF', 'ATR_percentile', 'regime_score', 'smc_zone_dist', 'lorentzian_dist'
 ]
 
+def get_market_regime(df):
+    try:
+        if 'ADX' in df.columns and not pd.isna(df['ADX'].iloc[-1]):
+            last_adx = df['ADX'].iloc[-1]
+            return 'trending' if last_adx > 25 else 'sideways'
+    except Exception:
+        pass
+    return 'sideways'
+
 def load_or_init_state(state_file):
     models = ['xgb', 'cat', 'rf']
     if os.path.exists(state_file):
@@ -86,6 +95,16 @@ def load_or_init_state(state_file):
                 state.setdefault('lookback_window', 150)
                 state.setdefault('active_features', base_features.copy())
                 state.setdefault('last_trained_timestamp', 0)
+                state.setdefault('current_regime', 'sideways')
+                
+                if 'regime_features' not in state or not isinstance(state['regime_features'], dict):
+                    state['regime_features'] = {
+                        'trending': base_features.copy(),
+                        'sideways': base_features.copy()
+                    }
+                else:
+                    state['regime_features'].setdefault('trending', base_features.copy())
+                    state['regime_features'].setdefault('sideways', base_features.copy())
                 
                 if 'model_weights' not in state:
                     state['model_weights'] = {}
@@ -103,12 +122,17 @@ def load_or_init_state(state_file):
     initial_weight = 1.0 / len(models)
     return {
         'learning_rate': 0.05,
-        'max_depth': 4, # Verlaagd om RAM te besparen
-        'n_estimators': 50, # Verlaagd om RAM te besparen
+        'max_depth': 4,
+        'n_estimators': 50,
         'baseline_error': float('inf'),
         'last_prediction': None,
         'search_direction': 1,
         'lookback_window': 150,
+        'current_regime': 'sideways',
+        'regime_features': {
+            'trending': base_features.copy(),
+            'sideways': base_features.copy()
+        },
         'active_features': base_features.copy(),
         'last_trained_timestamp': 0,
         'model_weights': {m: initial_weight for m in models},
@@ -118,7 +142,7 @@ def load_or_init_state(state_file):
         'take_profit': 0.0
     }
 
-def evaluate_and_adapt(state, current_price):
+def evaluate_and_adapt(state, current_price, current_regime):
     if state['last_prediction'] is not None:
         error = abs(state['last_prediction'] - current_price)
         if error < state['baseline_error']:
@@ -133,16 +157,30 @@ def evaluate_and_adapt(state, current_price):
     window_mutation = np.random.choice([-10, 10])
     state['lookback_window'] = int(np.clip(state['lookback_window'] + window_mutation, 60, 300))
 
+    # Zorg dat regime_features correct is geïnitialiseerd
+    if 'regime_features' not in state:
+        state['regime_features'] = {
+            'trending': base_features.copy(),
+            'sideways': base_features.copy()
+        }
+
+    # Haal de features op die specifiek bij dit regime horen
+    active_feats = state['regime_features'].get(current_regime, base_features.copy())
+
     if np.random.rand() < 0.3:
-        available_opts = [f for f in optional_features if f not in state['active_features']]
-        if available_opts and len(state['active_features']) < (len(base_features) + len(optional_features)):
+        available_opts = [f for f in optional_features if f not in active_feats]
+        if available_opts and len(active_feats) < (len(base_features) + len(optional_features)):
             new_feat = np.random.choice(available_opts)
-            state['active_features'].append(new_feat)
-        elif len(state['active_features']) > len(base_features):
-            removable_opts = [f for f in state['active_features'] if f in optional_features]
+            active_feats.append(new_feat)
+        elif len(active_feats) > len(base_features):
+            removable_opts = [f for f in active_feats if f in optional_features]
             if removable_opts:
                 removed = np.random.choice(removable_opts)
-                state['active_features'] = [f for f in state['active_features'] if f != removed]
+                active_feats = [f for f in active_feats if f != removed]
+
+    # Sla de gewijzigde features op in het specifieke regime-geheugen
+    state['regime_features'][current_regime] = active_feats
+    state['active_features'] = active_feats
 
     return state
 
@@ -193,14 +231,11 @@ def push_to_github():
             subprocess.run(['git', 'config', 'user.name', 'Render Quant Bot'], stdout=devnull, stderr=devnull)
             subprocess.run(['git', 'add', '*.json'], stdout=devnull, stderr=devnull)
 
-            # Controleer of er iets te committeren valt
             status = subprocess.run(['git', 'status', '--porcelain'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             if not status.stdout or not status.stdout.strip():
                 return
 
             subprocess.run(['git', 'commit', '-m', 'Auto-update Smart Evolutionary Ensemble [skip ci]'], stdout=devnull, stderr=devnull)
-            
-            # Forceer direct pushen naar de main branch om detached HEAD problemen te omzeilen
             subprocess.run(['git', 'push', '--force', repo_url, 'HEAD:main'], stdout=devnull, stderr=devnull)
     except Exception:
         pass
@@ -343,7 +378,17 @@ def main():
                 current_price = float(df['close'].iloc[-1])
                 current_atr = float(df['ATR'].iloc[-1]) if not np.isnan(df['ATR'].iloc[-1]) else (current_price * 0.02)
 
-                state = evaluate_and_adapt(state, current_price)
+                # Bepaal het huidige marktregime op basis van ADX
+                current_regime = get_market_regime(df)
+                state['current_regime'] = current_regime
+
+                # Laad de features die bij dit specifieke regime horen
+                if 'regime_features' in state and current_regime in state['regime_features']:
+                    state['active_features'] = state['regime_features'][current_regime]
+                else:
+                    state['active_features'] = base_features.copy()
+
+                state = evaluate_and_adapt(state, current_price, current_regime)
                 state['last_trained_timestamp'] = current_time
 
                 current_features = state['active_features']
@@ -364,7 +409,6 @@ def main():
 
                 latest_features = df_clean[current_features].iloc[[-1]]
 
-                # Lichte modellen om RAM binnen 512MB te houden
                 model_xgb = xgb.XGBRegressor(learning_rate=state['learning_rate'], max_depth=4, n_estimators=50, random_state=42, verbosity=0, n_jobs=1)
                 model_xgb.fit(X, y_reg)
                 pred_xgb = float(model_xgb.predict(latest_features)[0])
@@ -407,7 +451,6 @@ def main():
                 with open(state_file, 'w', encoding='utf-8') as f:
                     json.dump(state, f, indent=4)
 
-                # Direct en agressief geheugen opruimen per iteratie
                 del model_xgb, model_cat, model_rf, df, df_clean, df_train, X, y_reg, y_class
                 gc.collect()
                 time.sleep(2)
