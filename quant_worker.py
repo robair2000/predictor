@@ -45,7 +45,6 @@ import json
 import subprocess
 import time
 import gc
-import requests
 import numpy as np
 import pandas as pd
 import yfinance as yf
@@ -74,8 +73,7 @@ base_features = [
 ]
 
 optional_features = [
-    'MACD_hist', 'ADX', 'CMF', 'ATR_percentile', 'regime_score', 
-    'smc_zone_dist', 'lorentzian_dist', 'oi_change'
+    'MACD_hist', 'ADX', 'CMF', 'ATR_percentile', 'regime_score', 'smc_zone_dist', 'lorentzian_dist'
 ]
 
 def get_market_regime(df):
@@ -86,24 +84,6 @@ def get_market_regime(df):
     except Exception:
         pass
     return 'sideways'
-
-def fetch_open_interest_history(asset, limit=100):
-    """Haalt veilige Open Interest statistieken op via de Binance Futures API met fallback."""
-    try:
-        symbol = f"{asset}USDT"
-        url = f"https://fapi.binance.com/futures/data/openInterestHist?symbol={symbol}&period=1h&limit={limit}"
-        response = requests.get(url, timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            if isinstance(data, list) and len(data) > 0:
-                df_oi = pd.DataFrame(data)
-                df_oi['timestamp'] = pd.to_datetime(df_oi['timestamp'], unit='ms')
-                df_oi['sumOpenInterest'] = pd.to_numeric(df_oi['sumOpenInterest'], errors='coerce')
-                df_oi = df_oi.rename(columns={'timestamp': 'Date', 'sumOpenInterest': 'open_interest'})
-                return df_oi[['Date', 'open_interest']]
-    except Exception:
-        pass
-    return pd.DataFrame()
 
 def load_or_init_state(state_file):
     models = ['xgb', 'cat', 'rf']
@@ -177,12 +157,14 @@ def evaluate_and_adapt(state, current_price, current_regime):
     window_mutation = np.random.choice([-10, 10])
     state['lookback_window'] = int(np.clip(state['lookback_window'] + window_mutation, 60, 300))
 
+    # Zorg dat regime_features correct is geïnitialiseerd
     if 'regime_features' not in state:
         state['regime_features'] = {
             'trending': base_features.copy(),
             'sideways': base_features.copy()
         }
 
+    # Haal de features op die specifiek bij dit regime horen
     active_feats = state['regime_features'].get(current_regime, base_features.copy())
 
     if np.random.rand() < 0.3:
@@ -196,6 +178,7 @@ def evaluate_and_adapt(state, current_price, current_regime):
                 removed = np.random.choice(removable_opts)
                 active_feats = [f for f in active_feats if f != removed]
 
+    # Sla de gewijzigde features op in het specifieke regime-geheugen
     state['regime_features'][current_regime] = active_feats
     state['active_features'] = active_feats
 
@@ -274,16 +257,6 @@ def main():
                 df = fetch_data_safely(ticker, tf_info)
                 if df is None or df.empty or len(df) < 60:
                     continue
-
-                # Open Interest integratie toevoegen
-                df_oi = fetch_open_interest_history(asset)
-                if not df_oi.empty:
-                    df = pd.merge_asof(df.sort_values('Date'), df_oi.sort_values('Date'), on='Date', direction='backward')
-                    df['open_interest'] = df['open_interest'].ffill().fillna(0)
-                else:
-                    df['open_interest'] = 0.0
-
-                df['oi_change'] = df['open_interest'].pct_change().fillna(0)
 
                 df['SMA_20'] = df['close'].rolling(window=20).mean()
                 df['SMA_50'] = df['close'].rolling(window=50).mean()
@@ -405,9 +378,11 @@ def main():
                 current_price = float(df['close'].iloc[-1])
                 current_atr = float(df['ATR'].iloc[-1]) if not np.isnan(df['ATR'].iloc[-1]) else (current_price * 0.02)
 
+                # Bepaal het huidige marktregime op basis van ADX
                 current_regime = get_market_regime(df)
                 state['current_regime'] = current_regime
 
+                # Laad de features die bij dit specifieke regime horen
                 if 'regime_features' in state and current_regime in state['regime_features']:
                     state['active_features'] = state['regime_features'][current_regime]
                 else:
