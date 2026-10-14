@@ -416,12 +416,3 @@ def main():
                 pass
 
     push_to_github()
-
-if __name__ == '__main__':
-    while True:
-        try:
-            main()
-        except Exception:
-            pass
-        gc.collect()
-        time.sleep(900)
