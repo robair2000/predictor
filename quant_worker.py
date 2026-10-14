@@ -178,4 +178,300 @@ def main():
 
                 current_features = state['active_features']
                 df_clean = df.dropna(subset=current_features + ['close']).reset_index(drop=True)
-                if df_clean.empty
+                if df_clean.empty:
+                    continue
+
+                lookback = state['lookback_window']
+                df_train = df_clean.iloc[-lookback:] if len(df_clean) > lookback else df_clean
+
+                horizon = tf_info['horizon']
+                X = df_train[current_features].iloc[:-horizon]
+                y_reg = df_train['close'].shift(-horizon).dropna()
+                X = X.iloc[: len(y_reg)]
+                
+                y_class = (df_train['close'].shift(-horizon) > df_train['close']).astype(int).iloc[:-horizon]
+                y_class = y_class.iloc[: len(X)]
+
+                latest_features = df_clean[current_features].iloc[[-1]]
+
+                model_xgb = xgb.XGBRegressor(learning_rate=state['learning_rate'], max_depth=4, n_estimators=50, random_state=42, verbosity=0, n_jobs=1)
+                model_xgb.fit(X, y_reg)
+                pred_xgb = float(model_xgb.predict(latest_features)[0])
+
+                model_cat = CatBoostRegressor(learning_rate=state['learning_rate'], depth=4, iterations=50, random_seed=42, verbose=0, thread_count=1)
+                model_cat.fit(X, y_reg)
+                pred_cat = float(model_cat.predict(latest_features)[0])
+
+                model_rf = RandomForestRegressor(n_estimators=30, max_depth=4, random_state=42, n_jobs=1)
+                model_rf.fit(X, y_reg)
+                pred_rf = float(model_rf.predict(latest_features)[0])
+
+                preds = {
+                    'xgb': pred_xgb,
+                    'cat': pred_cat,
+                    'rf': pred_rf
+                }
+
+                state = update_dynamic_weights(state, preds, current_price)
+                weights = state['model_weights']
+
+                next_prediction = sum(preds[m] * weights[m] for m in preds)
+                state['last_prediction'] = next_prediction
+
+                try:
+                    clf_xgb = xgb.XGBClassifier(n_estimators=30, max_depth=3, random_state=42, eval_metric='logloss', verbosity=0, n_jobs=1)
+                    clf_xgb.fit(X, y_class)
+                    prob = clf_xgb.predict_proba(latest_features)[0][1]
+                    state['direction_probability'] = float(prob * 100)
+                except Exception:
+                    state['direction_probability'] = 50.0
+
+                if next_prediction > current_price:
+                    state['stop_loss'] = float(current_price - (1.5 * current_atr))
+                    state['take_profit'] = float(current_price + (2.5 * current_atr))
+                else:
+                    state['stop_loss'] = float(current_price + (1.5 * current_atr))
+                    state['take_profit'] = float(current_price - (2.5 * current_atr))
+
+                with open(state_file, 'w', encoding='utf-8') as f:
+                    json.dump(state, f, indent=4)
+
+                del model_xgb, model_cat, model_rf, df, df_clean, df_train, X, y_reg, y_class
+                gc.collect()
+                time.sleep(2)
+            except Exception:
+                gc.collect()
+                pass
+
+    push_to_github()
+
+# --- MINI WEBSERVER VOOR RENDER HEALTH CHECKS & CRON-JOB.ORG ---
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == '/run-worker':
+            threading.Thread(target=main, daemon=True).start()
+            self.send_response(200)
+            self.send_header('Content-type', 'text/plain')
+            self.end_headers()
+            self.wfile.write(b'Worker Started Successfully')
+        else:
+            self.send_response(200)
+            self.send_header('Content-type', 'text/plain')
+            self.end_headers()
+            self.wfile.write(b'Quant Worker Online')
+    
+    def log_message(self, format, *args):
+        pass
+
+def start_web_server():
+    try:
+        port = int(os.environ.get('PORT', 10000))
+        server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
+        server.serve_forever()
+    except Exception:
+        pass
+
+server_thread = threading.Thread(target=start_web_server, daemon=True)
+server_thread.start()
+
+import warnings
+warnings.filterwarnings('ignore', category=UserWarning)
+import json
+import subprocess
+import time
+import gc
+import numpy as np
+import pandas as pd
+import yfinance as yf
+import xgboost as xgb
+from catboost import CatBoostRegressor
+from sklearn.ensemble import RandomForestRegressor
+import logging
+
+warnings.filterwarnings('ignore')
+logging.getLogger('yfinance').setLevel(logging.CRITICAL)
+logging.getLogger('xgboost').setLevel(logging.CRITICAL)
+
+assets = ['BTC', 'ETH', 'LINK']
+
+timeframes = {
+    '15m': {'interval': '15m', 'period': '59d', 'horizon': 1, 'min_interval_seconds': 14 * 60},
+    '1h': {'interval': '1h', 'period': '365d', 'horizon': 1, 'min_interval_seconds': 55 * 60},
+    '1d': {'interval': '1d', 'period': '365d', 'horizon': 1, 'min_interval_seconds': 23 * 3600},
+    '1w': {'interval': '1wk', 'period': '365d', 'horizon': 1, 'min_interval_seconds': 6 * 86400},
+    '1m': {'interval': '1mo', 'period': '365d', 'horizon': 1, 'min_interval_seconds': 25 * 86400},
+}
+
+base_features = [
+    'return_1', 'dist_sma20', 'dist_sma50', 'dist_ema9', 'dist_ema21',
+    'RSI', 'atr_ratio', 'bb_position', 'OBV_slope', 'VWAP_dist', 'Supertrend_dist'
+]
+
+optional_features = [
+    'MACD_hist', 'ADX', 'CMF', 'ATR_percentile', 'regime_score', 'smc_zone_dist', 'lorentzian_dist'
+]
+
+def get_market_regime(df):
+    try:
+        if 'ADX' in df.columns and not pd.isna(df['ADX'].iloc[-1]):
+            last_adx = df['ADX'].iloc[-1]
+            return 'trending' if last_adx > 25 else 'sideways'
+    except Exception:
+        pass
+    return 'sideways'
+
+def load_or_init_state(state_file):
+    models = ['xgb', 'cat', 'rf']
+    if os.path.exists(state_file):
+        try:
+            with open(state_file, 'r', encoding='utf-8') as f:
+                state = json.load(f)
+                state.setdefault('search_direction', 1)
+                state.setdefault('lookback_window', 150)
+                state.setdefault('active_features', base_features.copy())
+                state.setdefault('last_trained_timestamp', 0)
+                state.setdefault('current_regime', 'sideways')
+                
+                if 'regime_features' not in state or not isinstance(state['regime_features'], dict):
+                    state['regime_features'] = {
+                        'trending': base_features.copy(),
+                        'sideways': base_features.copy()
+                    }
+                else:
+                    state['regime_features'].setdefault('trending', base_features.copy())
+                    state['regime_features'].setdefault('sideways', base_features.copy())
+                
+                if 'model_weights' not in state:
+                    state['model_weights'] = {}
+                if 'model_errors' not in state:
+                    state['model_errors'] = {}
+                
+                initial_weight = 1.0 / len(models)
+                for m in models:
+                    state['model_weights'].setdefault(m, initial_weight)
+                    state['model_errors'].setdefault(m, float('inf'))
+                return state
+        except Exception:
+            pass
+
+    initial_weight = 1.0 / len(models)
+    return {
+        'learning_rate': 0.05,
+        'max_depth': 4,
+        'n_estimators': 50,
+        'baseline_error': float('inf'),
+        'last_prediction': None,
+        'search_direction': 1,
+        'lookback_window': 150,
+        'current_regime': 'sideways',
+        'regime_features': {
+            'trending': base_features.copy(),
+            'sideways': base_features.copy()
+        },
+        'active_features': base_features.copy(),
+        'last_trained_timestamp': 0,
+        'model_weights': {m: initial_weight for m in models},
+        'model_errors': {m: float('inf') for m in models},
+        'direction_probability': 50.0,
+        'stop_loss': 0.0,
+        'take_profit': 0.0
+    }
+
+def evaluate_and_adapt(state, current_price, current_regime):
+    if state['last_prediction'] is not None:
+        error = abs(state['last_prediction'] - current_price)
+        if error < state['baseline_error']:
+            state['baseline_error'] = error
+        else:
+            state['search_direction'] *= -1
+            state['baseline_error'] = error
+
+    step = 0.005 * state['search_direction']
+    state['learning_rate'] = float(np.clip(state['learning_rate'] + step, 0.01, 0.15))
+    
+    window_mutation = np.random.choice([-10, 10])
+    state['lookback_window'] = int(np.clip(state['lookback_window'] + window_mutation, 60, 300))
+
+    if 'regime_features' not in state:
+        state['regime_features'] = {
+            'trending': base_features.copy(),
+            'sideways': base_features.copy()
+        }
+
+    active_feats = state['regime_features'].get(current_regime, base_features.copy())
+
+    if np.random.rand() < 0.3:
+        available_opts = [f for f in optional_features if f not in active_feats]
+        if available_opts and len(active_feats) < (len(base_features) + len(optional_features)):
+            new_feat = np.random.choice(available_opts)
+            active_feats.append(new_feat)
+        elif len(active_feats) > len(base_features):
+            removable_opts = [f for f in active_feats if f in optional_features]
+            if removable_opts:
+                removed = np.random.choice(removable_opts)
+                active_feats = [f for f in active_feats if f != removed]
+
+    state['regime_features'][current_regime] = active_feats
+    state['active_features'] = active_feats
+
+    return state
+
+def update_dynamic_weights(state, preds, current_price):
+    errors = {k: abs(v - current_price) for k, v in preds.items()}
+    state['model_errors'] = errors
+
+    inv_errors = {k: (1.0 / (v + 1e-8)) for k, v in errors.items()}
+    total_inv = sum(inv_errors.values())
+    
+    state['model_weights'] = {k: float(v / total_inv) for k, v in inv_errors.items()}
+    return state
+
+def fetch_data_safely(ticker, tf_info):
+    try:
+        df = yf.download(ticker, period=tf_info['period'], interval=tf_info['interval'], progress=False)
+        if df is None or df.empty:
+            return pd.DataFrame()
+
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+
+        df = df.reset_index()
+        date_col = 'Datetime' if 'Datetime' in df.columns else ('Date' if 'Date' in df.columns else df.columns[0])
+        df = df.rename(columns={
+            date_col: 'Date',
+            'Open': 'open',
+            'High': 'high',
+            'Low': 'low',
+            'Close': 'close',
+            'Volume': 'volume'
+        })
+        df['Date'] = pd.to_datetime(df['Date'])
+        df.set_index('Date', inplace=True)
+        return df.reset_index(drop=True)
+    except Exception:
+        return pd.DataFrame()
+
+def push_to_github():
+    github_token = os.environ.get('GITHUB_TOKEN')
+    if not github_token:
+        return
+    try:
+        repo_url = f'https://{github_token}@github.com/robair2000/predictor.git'
+        
+        with open(os.devnull, 'wb') as devnull:
+            subprocess.run(['git', 'config', 'user.email', 'render-worker@bot.com'], stdout=devnull, stderr=devnull, stdin=subprocess.DEVNULL)
+            subprocess.run(['git', 'config', 'user.name', 'Render Quant Bot'], stdout=devnull, stderr=devnull, stdin=subprocess.DEVNULL)
+            subprocess.run(['git', 'add', '*.json'], stdout=devnull, stderr=devnull, stdin=subprocess.DEVNULL)
+
+            status = subprocess.run(['git', 'status', '--porcelain'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, stdin=subprocess.DEVNULL)
+            if not status.stdout or not status.stdout.strip():
+                return
+
+            subprocess.run(['git', 'commit', '-m', 'Auto-update Smart Evolutionary Ensemble [skip ci]'], stdout=devnull, stderr=devnull, stdin=subprocess.DEVNULL)
+            subprocess.run(['git', 'push', '--force', repo_url, 'HEAD:main'], stdout=devnull, stderr=devnull, stdin=subprocess.DEVNULL)
+    except Exception:
+        pass
+
+if __name__ == '__main__':
+    while True:
+        time.sleep(3600)
