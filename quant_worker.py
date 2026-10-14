@@ -26,23 +26,23 @@ def suppress_output():
 
 suppress_output()
 
-# --- MINI WEBSERVER VOOR RENDER HEALTH CHECKS ---
+# --- MINI WEBSERVER VOOR RENDER HEALTH CHECKS & CRON-JOB.ORG ---
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
-        self.send_response(200)
-        self.send_header('Content-type', 'text/plain')
-        self.end_headers()
-        self.wfile.write(b'Quant Worker Online')
+        if self.path == '/run-worker':
+            # Start de main() direct in een achtergrond-thread zodat de HTTP-response meteen terug kan
+            threading.Thread(target=main, daemon=True).start()
+            self.send_response(200)
+            self.send_header('Content-type', 'text/plain')
+            self.end_headers()
+            self.wfile.write(b'Worker Started Successfully')
+        else:
+            self.send_response(200)
+            self.send_header('Content-type', 'text/plain')
+            self.end_headers()
+            self.wfile.write(b'Quant Worker Online')
     
     def log_message(self, format, *args):
-        pass
-
-def start_web_server():
-    try:
-        port = int(os.environ.get('PORT', 10000))
-        server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
-        server.serve_forever()
-    except Exception:
         pass
 
 server_thread = threading.Thread(target=start_web_server, daemon=True)
