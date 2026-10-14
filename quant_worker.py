@@ -1,6 +1,10 @@
 import os
 import sys
 
+# --- PERMANENTE PYTHON-LEVEL OUTPUT ONDERDRUKKING ---
+sys.stdout = open(os.devnull, 'w')
+sys.stderr = open(os.devnull, 'w')
+
 # --- EXTREME OUTPUT & WARNING SUPPRESSION (DIRECT BIJ DE START) ---
 os.environ["PYTHONWARNINGS"] = "ignore"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -229,16 +233,16 @@ def push_to_github():
         repo_url = f'https://{github_token}@github.com/robair2000/predictor.git'
         
         with open(os.devnull, 'wb') as devnull:
-            subprocess.run(['git', 'config', 'user.email', 'render-worker@bot.com'], stdout=devnull, stderr=devnull)
-            subprocess.run(['git', 'config', 'user.name', 'Render Quant Bot'], stdout=devnull, stderr=devnull)
-            subprocess.run(['git', 'add', '*.json'], stdout=devnull, stderr=devnull)
+            subprocess.run(['git', 'config', 'user.email', 'render-worker@bot.com'], stdout=devnull, stderr=devnull, stdin=subprocess.DEVNULL)
+            subprocess.run(['git', 'config', 'user.name', 'Render Quant Bot'], stdout=devnull, stderr=devnull, stdin=subprocess.DEVNULL)
+            subprocess.run(['git', 'add', '*.json'], stdout=devnull, stderr=devnull, stdin=subprocess.DEVNULL)
 
-            status = subprocess.run(['git', 'status', '--porcelain'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            status = subprocess.run(['git', 'status', '--porcelain'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, stdin=subprocess.DEVNULL)
             if not status.stdout or not status.stdout.strip():
                 return
 
-            subprocess.run(['git', 'commit', '-m', 'Auto-update Smart Evolutionary Ensemble [skip ci]'], stdout=devnull, stderr=devnull)
-            subprocess.run(['git', 'push', '--force', repo_url, 'HEAD:main'], stdout=devnull, stderr=devnull)
+            subprocess.run(['git', 'commit', '-m', 'Auto-update Smart Evolutionary Ensemble [skip ci]'], stdout=devnull, stderr=devnull, stdin=subprocess.DEVNULL)
+            subprocess.run(['git', 'push', '--force', repo_url, 'HEAD:main'], stdout=devnull, stderr=devnull, stdin=subprocess.DEVNULL)
     except Exception:
         pass
 
@@ -443,19 +447,4 @@ def main():
 
                 if next_prediction > current_price:
                     state['stop_loss'] = float(current_price - (1.5 * current_atr))
-                    state['take_profit'] = float(current_price + (2.5 * current_atr))
-                else:
-                    state['stop_loss'] = float(current_price + (1.5 * current_atr))
-                    state['take_profit'] = float(current_price - (2.5 * current_atr))
-
-                with open(state_file, 'w', encoding='utf-8') as f:
-                    json.dump(state, f, indent=4)
-
-                del model_xgb, model_cat, model_rf, df, df_clean, df_train, X, y_reg, y_class
-                gc.collect()
-                time.sleep(2)
-            except Exception:
-                gc.collect()
-                pass
-
-    push_to_github()
+                    state
