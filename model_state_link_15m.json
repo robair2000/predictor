@@ -1,26 +1,26 @@
 {
-    "learning_rate": 0.08000000000000002,
+    "learning_rate": 0.07500000000000001,
     "max_depth": 5,
     "n_estimators": 100,
     "previous_learning_rate": 0.045000000000000005,
     "previous_max_depth": 5,
-    "baseline_error": 0.07735537167572026,
-    "last_prediction": 12.787764708755608,
-    "search_direction": 1,
-    "lookback_window": 230,
+    "baseline_error": 0.08276478504955342,
+    "last_prediction": 12.70733863443977,
+    "search_direction": -1,
+    "lookback_window": 220,
     "model_weights": {
-        "xgb": 0.49304596156134395,
-        "cat": 0.11520775725477504,
-        "rf": 0.39174628118388105
+        "xgb": 0.8056224793768241,
+        "cat": 0.04382630284432965,
+        "rf": 0.15055121777884636
     },
     "model_errors": {
-        "xgb": 0.018095016479492188,
-        "cat": 0.07743991195186517,
-        "rf": 0.022774117435485408
+        "xgb": 0.002902984619140625,
+        "cat": 0.05336332596280613,
+        "rf": 0.015534356026352114
     },
-    "direction_probability": 80.95426177978516,
-    "stop_loss": 12.665428127561297,
-    "take_profit": 12.920285599572319,
+    "direction_probability": 75.58844757080078,
+    "stop_loss": 12.599464041846138,
+    "take_profit": 12.880893060139247,
     "active_features": [
         "return_1",
         "dist_sma20",
@@ -32,13 +32,36 @@
         "bb_position",
         "OBV_slope",
         "VWAP_dist",
-        "ATR_percentile",
-        "ADX",
-        "lorentzian_dist",
-        "smc_zone_dist",
-        "MACD_hist",
-        "regime_score",
-        "CMF"
+        "Supertrend_dist"
     ],
-    "last_trained_timestamp": 1791981924.630173
+    "last_trained_timestamp": 1791982886.3516695,
+    "current_regime": "sideways",
+    "regime_features": {
+        "trending": [
+            "return_1",
+            "dist_sma20",
+            "dist_sma50",
+            "dist_ema9",
+            "dist_ema21",
+            "RSI",
+            "atr_ratio",
+            "bb_position",
+            "OBV_slope",
+            "VWAP_dist",
+            "Supertrend_dist"
+        ],
+        "sideways": [
+            "return_1",
+            "dist_sma20",
+            "dist_sma50",
+            "dist_ema9",
+            "dist_ema21",
+            "RSI",
+            "atr_ratio",
+            "bb_position",
+            "OBV_slope",
+            "VWAP_dist",
+            "Supertrend_dist"
+        ]
+    }
 }

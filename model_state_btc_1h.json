@@ -1,26 +1,26 @@
 {
-    "learning_rate": 0.09500000000000003,
+    "learning_rate": 0.09000000000000002,
     "max_depth": 5,
     "n_estimators": 100,
     "previous_learning_rate": 0.05,
     "previous_max_depth": 5,
-    "baseline_error": 503.28676003575674,
-    "last_prediction": 83579.66298103824,
-    "search_direction": 1,
-    "lookback_window": 130,
+    "baseline_error": 951.8504810382437,
+    "last_prediction": 82521.07445136362,
+    "search_direction": -1,
+    "lookback_window": 140,
     "model_weights": {
-        "xgb": 0.6569283304283734,
-        "cat": 0.035453262255128716,
-        "rf": 0.3076184073164978
+        "xgb": 0.34865692403913867,
+        "cat": 0.40603254667411026,
+        "rf": 0.2453105292867511
     },
     "model_errors": {
-        "xgb": 9.203125,
-        "cat": 170.52855400672706,
-        "rf": 19.653549334732816
+        "xgb": 102.046875,
+        "cat": 87.62684133616858,
+        "rf": 145.0380040750315
     },
-    "direction_probability": 51.326908111572266,
-    "stop_loss": 83021.16685267857,
-    "take_profit": 84494.36774553571,
+    "direction_probability": 39.420719146728516,
+    "stop_loss": 83258.75502232143,
+    "take_profit": 81576.24162946429,
     "active_features": [
         "return_1",
         "dist_sma20",
@@ -32,9 +32,36 @@
         "bb_position",
         "OBV_slope",
         "VWAP_dist",
-        "ATR_percentile",
-        "regime_score",
-        "ADX"
+        "Supertrend_dist"
     ],
-    "last_trained_timestamp": 1791979513.4198453
+    "last_trained_timestamp": 1791982886.3516695,
+    "current_regime": "sideways",
+    "regime_features": {
+        "trending": [
+            "return_1",
+            "dist_sma20",
+            "dist_sma50",
+            "dist_ema9",
+            "dist_ema21",
+            "RSI",
+            "atr_ratio",
+            "bb_position",
+            "OBV_slope",
+            "VWAP_dist",
+            "Supertrend_dist"
+        ],
+        "sideways": [
+            "return_1",
+            "dist_sma20",
+            "dist_sma50",
+            "dist_ema9",
+            "dist_ema21",
+            "RSI",
+            "atr_ratio",
+            "bb_position",
+            "OBV_slope",
+            "VWAP_dist",
+            "Supertrend_dist"
+        ]
+    }
 }
