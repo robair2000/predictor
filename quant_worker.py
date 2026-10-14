@@ -1,5 +1,10 @@
 import os
 import sys
+
+# --- EXTREME OUTPUT & WARNING SUPPRESSION (DIRECT BIJ DE START) ---
+os.environ["PYTHONWARNINGS"] = "ignore"
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
@@ -157,14 +162,12 @@ def evaluate_and_adapt(state, current_price, current_regime):
     window_mutation = np.random.choice([-10, 10])
     state['lookback_window'] = int(np.clip(state['lookback_window'] + window_mutation, 60, 300))
 
-    # Zorg dat regime_features correct is geïnitialiseerd
     if 'regime_features' not in state:
         state['regime_features'] = {
             'trending': base_features.copy(),
             'sideways': base_features.copy()
         }
 
-    # Haal de features op die specifiek bij dit regime horen
     active_feats = state['regime_features'].get(current_regime, base_features.copy())
 
     if np.random.rand() < 0.3:
@@ -178,7 +181,6 @@ def evaluate_and_adapt(state, current_price, current_regime):
                 removed = np.random.choice(removable_opts)
                 active_feats = [f for f in active_feats if f != removed]
 
-    # Sla de gewijzigde features op in het specifieke regime-geheugen
     state['regime_features'][current_regime] = active_feats
     state['active_features'] = active_feats
 
@@ -378,11 +380,9 @@ def main():
                 current_price = float(df['close'].iloc[-1])
                 current_atr = float(df['ATR'].iloc[-1]) if not np.isnan(df['ATR'].iloc[-1]) else (current_price * 0.02)
 
-                # Bepaal het huidige marktregime op basis van ADX
                 current_regime = get_market_regime(df)
                 state['current_regime'] = current_regime
 
-                # Laad de features die bij dit specifieke regime horen
                 if 'regime_features' in state and current_regime in state['regime_features']:
                     state['active_features'] = state['regime_features'][current_regime]
                 else:
