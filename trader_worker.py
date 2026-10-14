@@ -27,12 +27,16 @@ server_thread.start()
 # --- CONFIGURATIE FUTURES LIVE TRADING & TRAILING STOP ---
 ASSETS = ['BTC', 'ETH', 'LINK']
 TIMEFRAMES = ['15m', '1h', '1d']
-CHECK_INTERVAL_SECONDS = 900  # Elke 15 minuten controleren
-TRADE_AMOUNT_USDT = 15.0      # Jouw inzet per trade in USDT (marge)
-LEVERAGE = 5                  # Vaste hefboom van 5x
+CHECK_INTERVAL_SECONDS = 900          # Elke 15 minuten controleren
+TRADE_AMOUNT_USDT = 15.0              # Jouw inzet per trade in USDT (marge)
+LEVERAGE = 5                          # Vaste hefboom van 5x
+
+# Professionele kwantitatieve filters
+MIN_DIRECTION_PROBABILITY = 70.0      # Minimale stijgings-/daalwinst kans (70%)
+MIN_PREDICTED_RETURN_PCT = 0.30       # Minimale verwachte koersbeweging in % (0.30% om fees te overwinnen)
 
 # Lokaal geheugen om de piekprices bij te houden voor de Trailing Stop
-# Structuur: { "BTC/USDT:USDT": {"peak_price": 85000.0, "initial_sl": 80000.0} }
+# Structuur: { "BTC/USDT:USDT": {"peak_price": 85000.0, "sl": 80000.0} }
 active_trade_peaks = {}
 
 # Initialiseer KuCoin voor FUTURES (Swap) met je Render Environment Variables
@@ -80,7 +84,6 @@ def manage_open_positions_and_trailing_stops():
             try:
                 with open(state_file, 'r', encoding='utf-8') as f:
                     st_data = json.load(f)
-                    # Schatten ATR op basis van stop loss afstand indien beschikbaar
                     sl_val = st_data.get('stop_loss', 0)
                     if sl_val > 0:
                         current_atr = abs(entry_price - sl_val) / 1.5
@@ -157,48 +160,59 @@ def execute_live_trades():
                         if symbol not in exchange.markets:
                             symbol = f"{asset}/USDT"
                         
-                        print(f"Beoordelen {symbol} ({tf}) -> Voorspelling: {last_pred}, Kans: {prob:.1f}%")
-                        
                         ticker = exchange.fetch_ticker(symbol)
                         current_price = ticker['last']
                         
-                        try:
-                            exchange.set_leverage(LEVERAGE, symbol)
-                        except Exception:
-                            pass
+                        # Bereken de voorspelde procentuele beweging van het model ten opzichte van de huidige koers
+                        predicted_return_pct = 0.0
+                        if last_pred is not None:
+                            # Als we een regressor-waarde hebben opgeslagen, gebruiken we die, anders schatten we op basis van TP/SL verhouding
+                            # Hier pakken we de absolute verwachting of schatting
+                            # Voor de veiligheid berekenen we het procentuele verschil op basis van de verwachte prijsstap
+                            estimated_target = state.get('last_prediction_price', None)
+                            if estimated_target and estimated_target > 0:
+                                predicted_return_pct = abs((estimated_target - current_price) / current_price) * 100
+                            else:
+                                # Fallback: Als het model geen losse prijsstap heeft opgeslagen, kijken we naar de afstand tot de take-profit gedeeld door de stap
+                                predicted_return_pct = abs((take_profit_val - current_price) / current_price) * 100 / 2.5 # Benadering van 1 ATR stap
 
-                        position_usdt_value = TRADE_AMOUNT_USDT * LEVERAGE
-                        amount = position_usdt_value / current_price
+                        print(f"Beoordelen {symbol} ({tf}) -> Voorspelling: {last_pred}, Kans: {prob:.1f}%, Verwachte Move: {predicted_return_pct:.2f}%")
 
-                        if prob >= 70.0 and last_pred == 1:
-                            print(f"🔥 Sterk LONG signaal voor {symbol} met 5x leverage!")
+                        # CONTROLE OP KANS ÉN MINIMALE RENDEMENTSDREMPEL
+                        if prob >= MIN_DIRECTION_PROBABILITY and predicted_return_pct >= MIN_PREDICTED_RETURN_PCT:
                             try:
+                                exchange.set_leverage(LEVERAGE, symbol)
+                            except Exception:
+                                pass
+
+                            position_usdt_value = TRADE_AMOUNT_USDT * LEVERAGE
+                            amount = position_usdt_value / current_price
+
+                            if last_pred == 1:
+                                print(f"🔥 Sterk LONG signaal met voldoende verwachte marge ({predicted_return_pct:.2f}%) voor {symbol}!")
                                 params = {
                                     'stopLoss': {'triggerPrice': stop_loss_val},
                                     'takeProfit': {'triggerPrice': take_profit_val},
                                 }
                                 order = exchange.create_order(symbol, 'market', 'buy', amount, None, params)
                                 print(f"✅ Long futures order succesvol geplaatst: {order.get('id')}")
-                            except Exception as order_err:
-                                print(f"❌ Fout bij plaatsen long order: {order_err}")
-                            
-                        elif prob >= 70.0 and last_pred == 0:
-                            print(f"🔻 Sterk SHORT signaal voor {symbol} met 5x leverage!")
-                            try:
+                                
+                            elif last_pred == 0:
+                                print(f"🔻 Sterk SHORT signaal met voldoende verwachte marge ({predicted_return_pct:.2f}%) voor {symbol}!")
                                 params = {
                                     'stopLoss': {'triggerPrice': stop_loss_val},
                                     'takeProfit': {'triggerPrice': take_profit_val},
                                 }
                                 order = exchange.create_order(symbol, 'market', 'sell', amount, None, params)
                                 print(f"✅ Short futures order succesvol geplaatst: {order.get('id')}")
-                            except Exception as order_err:
-                                print(f"❌ Fout bij plaatsen short order: {order_err}")
+                        else:
+                            print(f"ℹ️ Signaal overgeslagen voor {symbol} ({tf}): Kans ({prob:.1f}%) of verwachte move ({predicted_return_pct:.2f}%) te laag.")
                             
                 except Exception as e:
                     print(f"Fout bij lezen van {state_file} of uitvoeren trade: {e}")
 
 if __name__ == '__main__':
-    print("Futures Live Trader Worker met Trailing Stop is gestart (24/7)...")
+    print("Futures Live Trader Worker met Trailing Stop en Rendement-filters is gestart (24/7)...")
     while True:
         execute_live_trades()
         time.sleep(CHECK_INTERVAL_SECONDS)
