@@ -409,3 +409,60 @@ def main():
                 X = X.iloc[: len(y_reg)]
                 
                 y_class = (df_train['close'].shift(-horizon) > df_train['close']).astype(int).iloc[:-horizon]
+                y_class = y_class.iloc[: len(X)]
+
+                latest_features = df_clean[current_features].iloc[[-1]]
+
+                model_xgb = xgb.XGBRegressor(learning_rate=state['learning_rate'], max_depth=4, n_estimators=50, random_state=42, verbosity=0, n_jobs=1)
+                model_xgb.fit(X, y_reg)
+                pred_xgb = float(model_xgb.predict(latest_features)[0])
+
+                model_cat = CatBoostRegressor(learning_rate=state['learning_rate'], depth=4, iterations=50, random_seed=42, verbose=0, thread_count=1)
+                model_cat.fit(X, y_reg)
+                pred_cat = float(model_cat.predict(latest_features)[0])
+
+                model_rf = RandomForestRegressor(n_estimators=30, max_depth=4, random_state=42, n_jobs=1)
+                model_rf.fit(X, y_reg)
+                pred_rf = float(model_rf.predict(latest_features)[0])
+
+                preds = {
+                    'xgb': pred_xgb,
+                    'cat': pred_cat,
+                    'rf': pred_rf
+                }
+
+                state = update_dynamic_weights(state, preds, current_price)
+                weights = state['model_weights']
+
+                next_prediction = sum(preds[m] * weights[m] for m in preds)
+                state['last_prediction'] = next_prediction
+
+                try:
+                    clf_xgb = xgb.XGBClassifier(n_estimators=30, max_depth=3, random_state=42, eval_metric='logloss', verbosity=0, n_jobs=1)
+                    clf_xgb.fit(X, y_class)
+                    prob = clf_xgb.predict_proba(latest_features)[0][1]
+                    state['direction_probability'] = float(prob * 100)
+                except Exception:
+                    state['direction_probability'] = 50.0
+
+                if next_prediction > current_price:
+                    state['stop_loss'] = float(current_price - (1.5 * current_atr))
+                    state['take_profit'] = float(current_price + (2.5 * current_atr))
+                else:
+                    state['stop_loss'] = float(current_price + (1.5 * current_atr))
+                    state['take_profit'] = float(current_price - (2.5 * current_atr))
+
+                with open(state_file, 'w', encoding='utf-8') as f:
+                    json.dump(state, f, indent=4)
+
+                del model_xgb, model_cat, model_rf, df, df_clean, df_train, X, y_reg, y_class
+                gc.collect()
+                time.sleep(2)
+            except Exception:
+                gc.collect()
+                pass
+
+    push_to_github()
+
+if __name__ == '__main__':
+    main()
