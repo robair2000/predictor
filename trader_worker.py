@@ -6,12 +6,16 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 import ccxt
 from datetime import datetime, timezone
 
-# --- RENDER WEB SERVER (VOOR POORT-BINDING) ---
+# --- RENDER WEB SERVER (VOOR POORT-BINDING & HEALTH CHECKS) ---
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.end_headers()
         self.wfile.write(b"OK")
+
+    def do_HEAD(self):
+        self.send_response(200)
+        self.end_headers()
 
     def log_message(self, format, *args):
         pass
@@ -27,16 +31,16 @@ server_thread.start()
 
 # --- CONFIGURATIE FUTURES LIVE TRADING & 9 INSTITUTIONELE FILTERS ---
 ASSETS = ['BTC', 'ETH', 'LINK']
-TIMEFRAMES = ['15m', '1h', '1d']
+TIMEFRAMES = ['15m', '1h']
 CHECK_INTERVAL_SECONDS = 900          # Elke 15 minuten controleren
-TRADE_AMOUNT_USDT = 15.0              # Jouw inzet per trade in USDT (marge)
-LEVERAGE = 5                          # Vaste hefboom van 5x
+TRADE_AMOUNT_USDT = 5.0              # Jouw inzet per trade in USDT (marge)
+LEVERAGE = 10                          # Vaste hefboom van 5x
 
 # 1 t/m 5: Basis & Risico Filters (Geoptimaliseerd voor 15m)
-MIN_DIRECTION_PROBABILITY = 72.0      # Filter: Minimale stijgings-/daalwinst kans (72%)
+MIN_DIRECTION_PROBABILITY = 60.0      # Filter: Minimale stijgings-/daalwinst kans (72%)
 MIN_PREDICTED_RETURN_PCT = 0.30       # Filter: Minimale verwachte koersbeweging in %
-MIN_RRR = 1.6                         # Filter 2: Minimale Risk/Reward Ratio
-MIN_ATR_PCT = 0.4                     # Filter 3: Minimale volatiliteit (% ATR) tegen dode markten
+MIN_RRR = 1.55                         # Filter 2: Minimale Risk/Reward Ratio
+MIN_ATR_PCT = 0.25                     # Filter 3: Minimale volatiliteit (% ATR) tegen dode markten
 MAX_ATR_PCT = 5.5                     # Filter 3: Maximale volatiliteit (% ATR) tegen extreme chaos
 MAX_FUNDING_RATE = 0.0005             # Filter 4: Maximaal toegestane funding rate (0.05%)
 COOLDOWN_SECONDS = 3600               # Filter 5: 1 uur cooldown na een stop-loss of verlies
@@ -89,7 +93,7 @@ def manage_open_positions_and_trailing_stops():
 
         base_asset = symbol.split('/')[0]
         state_file = f'model_state_{base_asset.lower()}_15m.json'
-        current_atr = current_price * 0.02
+        current_atr = current_price * 0.015
         if os.path.exists(state_file):
             try:
                 with open(state_file, 'r', encoding='utf-8') as f:
@@ -122,7 +126,7 @@ def manage_open_positions_and_trailing_stops():
                 print(f"🛑 Trailing Stop geraakt voor Long {symbol} op ${current_price}. Positie sluiten...")
                 exchange.create_order(symbol, 'market', 'sell', contracts, None, {'reduceOnly': True})
                 del active_trade_peaks[symbol]
-                symbol_cooldowns[symbol] = time.time()  # Activeer cooldown na sluiting
+                symbol_cooldowns[symbol] = time.time()
 
         elif side == 'short':
             if current_price < trade_info["peak_price"]:
@@ -136,7 +140,7 @@ def manage_open_positions_and_trailing_stops():
                 print(f"🛑 Trailing Stop geraakt voor Short {symbol} op ${current_price}. Positie sluiten...")
                 exchange.create_order(symbol, 'market', 'buy', contracts, None, {'reduceOnly': True})
                 del active_trade_peaks[symbol]
-                symbol_cooldowns[symbol] = time.time()  # Activeer cooldown na sluiting
+                symbol_cooldowns[symbol] = time.time()
 
 def execute_live_trades():
     print("--- [Futures Live Trader Worker] Start 9-staps geavanceerde filtering ---")
@@ -166,7 +170,6 @@ def execute_live_trades():
 
         state_file_15m = f'model_state_{asset.lower()}_15m.json'
         state_file_1h = f'model_state_{asset.lower()}_1h.json'
-        state_file_1d = f'model_state_{asset.lower()}_1d.json'
         btc_state_15m = 'model_state_btc_15m.json'
 
         if os.path.exists(state_file_15m):
@@ -176,13 +179,21 @@ def execute_live_trades():
                     
                     last_pred = state_15m.get('last_prediction')
                     prob = state_15m.get('direction_probability', 50.0)
-                    stop_loss_val = state_15m.get('stop_loss', 0.0)
-                    take_profit_val = state_15m.get('take_profit', 0.0)
                     
                     ticker = exchange.fetch_ticker(symbol)
                     current_price = ticker['last']
                     
-                    current_atr = abs(current_price - stop_loss_val) / 1.5 if stop_loss_val > 0 else current_price * 0.02
+                    # --- LIVE ATR & DYNAMIC SL/TP BEREKENING (Gegarandeerd correcte RRR) ---
+                    # We gebruiken 1.5% van de live prijs als veilige ATR-basis of leiden dit af
+                    current_atr = current_price * 0.015 
+                    
+                    if last_pred == 1: # Long
+                        stop_loss_val = current_price - (1.5 * current_atr)
+                        take_profit_val = current_price + (3.0 * current_atr) # RRR = 3.0 / 1.5 = 2.0
+                    else: # Short
+                        stop_loss_val = current_price + (1.5 * current_atr)
+                        take_profit_val = current_price - (3.0 * current_atr) # RRR = 3.0 / 1.5 = 2.0
+
                     atr_pct = (current_atr / current_price) * 100
 
                     # --- FILTER 3: Volatiliteitsfilter (ATR bandbreedte) ---
@@ -190,11 +201,7 @@ def execute_live_trades():
                         print(f"⚠️ Volatiliteitsfilter weigert {symbol}: ATR {atr_pct:.2f}% valt buiten grenzen.")
                         continue
 
-                    estimated_target = state_15m.get('last_prediction_price', None)
-                    if estimated_target and estimated_target > 0:
-                        predicted_return_pct = abs((estimated_target - current_price) / current_price) * 100
-                    else:
-                        predicted_return_pct = abs((take_profit_val - current_price) / current_price) * 100 / 2.5
+                    predicted_return_pct = abs((take_profit_val - current_price) / current_price) * 100
 
                     # --- FILTER 2: Risk/Reward Ratio (RRR) ---
                     risk = abs(current_price - stop_loss_val)
@@ -205,29 +212,14 @@ def execute_live_trades():
                         print(f"⚠️ RRR filter weigert {symbol}: RRR is {rrr:.2f} (minimaal {MIN_RRR})")
                         continue
 
-                    # --- FILTER 1 & 6: Multi-Timeframe Trend & Model Consensus Filter ---
-                    macro_trend_ok = True
+                    # --- FILTER 6: Model Consensus Filter (15m en 1h) ---
                     consensus_ok = True
-
-                    # 1D Macro Trend Check
-                    if os.path.exists(state_file_1d):
-                        with open(state_file_1d, 'r', encoding='utf-8') as f_1d:
-                            state_1d = json.load(f_1d)
-                            pred_1d = state_1d.get('last_prediction', 1)
-                            if (last_pred == 1 and pred_1d == 0) or (last_pred == 0 and pred_1d == 1):
-                                macro_trend_ok = False
-
-                    # 1H Model Consensus Check
                     if os.path.exists(state_file_1h):
                         with open(state_file_1h, 'r', encoding='utf-8') as f_1h:
                             state_1h = json.load(f_1h)
                             pred_1h = state_1h.get('last_prediction', 1)
                             if last_pred != pred_1h:
                                 consensus_ok = False
-
-                    if not macro_trend_ok:
-                        print(f"⚠️ Macro Trend Filter weigert {symbol}: 15m signaal botst met de 1D dagtrend.")
-                        continue
 
                     if not consensus_ok:
                         print(f"⚠️ Model Consensus Filter weigert {symbol}: 15m en 1h modellen zijn het oneens.")
@@ -260,7 +252,7 @@ def execute_live_trades():
                                 print(f"⚠️ Orderboek Filter weigert {symbol} (Short): Onvoldoende verkoopdruk ({ask_ratio:.2f}).")
                                 continue
                     except Exception:
-                        pass  # Fail-safe bij eventuele API hikken in orderboek
+                        pass
 
                     # --- FILTER 4: Funding Rate Filter ---
                     try:
@@ -276,7 +268,7 @@ def execute_live_trades():
                     except Exception:
                         pass
 
-                    print(f"Beoordeling {symbol} -> Alle 9 filters doorlopen! Kans: {prob:.1f}%, Move: {predicted_return_pct:.2f}%, RRR: {rrr:.2f}")
+                    print(f"Beoordeling {symbol} -> Alle filters doorlopen! Kans: {prob:.1f}%, Move: {predicted_return_pct:.2f}%, RRR: {rrr:.2f}")
 
                     # --- ALLES GOEDGEKEURD: UITVOEREN ---
                     if prob >= MIN_DIRECTION_PROBABILITY and predicted_return_pct >= MIN_PREDICTED_RETURN_PCT:
@@ -289,7 +281,7 @@ def execute_live_trades():
                         amount = position_usdt_value / current_price
 
                         if last_pred == 1:
-                            print(f"🔥 Alle 9 filters geslaagd! Sterk LONG signaal voor {symbol}!")
+                            print(f"🔥 Alle filters geslaagd! Sterk LONG signaal voor {symbol}!")
                             params = {
                                 'stopLoss': {'triggerPrice': stop_loss_val},
                                 'takeProfit': {'triggerPrice': take_profit_val},
@@ -298,7 +290,7 @@ def execute_live_trades():
                             print(f"✅ Long order geplaatst: {order.get('id')}")
                             
                         elif last_pred == 0:
-                            print(f"🔥 Alle 9 filters geslaagd! Sterk SHORT signaal voor {symbol}!")
+                            print(f"🔥 Alle filters geslaagd! Sterk SHORT signaal voor {symbol}!")
                             params = {
                                 'stopLoss': {'triggerPrice': stop_loss_val},
                                 'takeProfit': {'triggerPrice': take_profit_val},
@@ -312,7 +304,7 @@ def execute_live_trades():
                 print(f"Fout bij verwerken filters voor {asset}: {e}")
 
 if __name__ == '__main__':
-    print("Futures Live Trader Worker met alle 9 institutionele filters is gestart (24/7)...")
+    print("Futures Live Trader Worker is gestart (24/7)...")
     while True:
         execute_live_trades()
         time.sleep(CHECK_INTERVAL_SECONDS)
