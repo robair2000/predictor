@@ -219,6 +219,11 @@ def push_to_github():
         with open(os.devnull, 'wb') as devnull:
             subprocess.run(['git', 'config', 'user.email', 'render-worker@bot.com'], stdout=devnull, stderr=devnull, stdin=subprocess.DEVNULL)
             subprocess.run(['git', 'config', 'user.name', 'Render Quant Bot'], stdout=devnull, stderr=devnull, stdin=subprocess.DEVNULL)
+            
+            # Haal eerst de nieuwste wijzigingen van GitHub op om conflicten te voorkomen
+            subprocess.run(['git', 'pull', '--rebase', repo_url, 'main'], stdout=devnull, stderr=devnull, stdin=subprocess.DEVNULL)
+            
+            # Voeg alleen de JSON-bestanden toe
             subprocess.run(['git', 'add', '*.json'], stdout=devnull, stderr=devnull, stdin=subprocess.DEVNULL)
 
             status = subprocess.run(['git', 'status', '--porcelain'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, stdin=subprocess.DEVNULL)
@@ -226,7 +231,9 @@ def push_to_github():
                 return
 
             subprocess.run(['git', 'commit', '-m', 'Auto-update Smart Evolutionary Ensemble [skip ci]'], stdout=devnull, stderr=devnull, stdin=subprocess.DEVNULL)
-            subprocess.run(['git', 'push', '--force', repo_url, 'HEAD:main'], stdout=devnull, stderr=devnull, stdin=subprocess.DEVNULL)
+            
+            # Veilige push ZONDER --force, zodat je code op main intact blijft!
+            subprocess.run(['git', 'push', repo_url, 'HEAD:main'], stdout=devnull, stderr=devnull, stdin=subprocess.DEVNULL)
     except Exception:
         pass
 
