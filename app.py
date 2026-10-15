@@ -8,11 +8,11 @@ import yfinance as yf
 # Pagina configuratie
 st.set_page_config(
     page_title="RV Predictor",
-    page_icon="🔮",
+    page_icon="📈",
     layout="wide"
 )
 
-st.title("🔮 RV Predictor")
+st.title("📈 RV Predictor")
 st.markdown("*Its magic*")
 
 # Sidebar: Asset keuze & Tijdinterval (Timescales)
@@ -23,6 +23,7 @@ asset_options = {
 }
 
 interval_options = {
+    '5 Minuten': {'interval': '5m', 'period': '59d', 'code': '5m'},
     '15 Minuten': {'interval': '15m', 'period': '59d', 'code': '15m'},
     '1 Uur': {'interval': '1h', 'period': '730d', 'code': '1h'},
     '1 Dag': {'interval': '1d', 'period': 'max', 'code': '1d'},
@@ -117,8 +118,8 @@ if df is not None and not df.empty:
                 
             st.markdown("---")
             
-            # Model details uitklapmenu (GEEN grafieken hieronder)
-            with st.expander("📄 Bekijk Model & State Details (Weging, Fouten & Parameters)"):
+            # Model details uitklapmenu
+            with st.expander("🔍 Bekijk Model & State Details (Weging, Fouten & Parameters)"):
                 st.json(state)
                 
         except Exception as e:
