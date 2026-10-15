@@ -1,10 +1,6 @@
 import os
 import sys
 
-# --- PERMANENTE PYTHON-LEVEL OUTPUT ONDERDRUKKING ---
-# sys.stdout = open(os.devnull, 'w')
-# sys.stderr = open(os.devnull, 'w')
-
 # --- EXTREME OUTPUT & WARNING SUPPRESSION (DIRECT BIJ DE START) ---
 os.environ["PYTHONWARNINGS"] = "ignore"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -15,7 +11,7 @@ import time
 import gc
 import numpy as np
 import pandas as pd
-import yfinance as yf
+import ccxt
 import xgboost as xgb
 from catboost import CatBoostRegressor
 from sklearn.ensemble import RandomForestRegressor
@@ -23,32 +19,17 @@ import logging
 
 warnings_filter = __import__('warnings')
 warnings_filter.filterwarnings('ignore')
-logging.getLogger('yfinance').setLevel(logging.CRITICAL)
 logging.getLogger('xgboost').setLevel(logging.CRITICAL)
-
-# --- HARDCORE OS-NIVEAU OUTPUT ONDERDRUKKING ---
-#def suppress_output():
-#    try:
-#        sys.stdout.flush()
-#        sys.stderr.flush()
-#        devnull = os.open(os.devnull, os.O_WRONLY)
-#        os.dup2(devnull, 1)
-#        os.dup2(devnull, 2)
-#        os.close(devnull)
-#    except Exception:
-#        pass
-
-#suppress_output()
 
 assets = ['BTC', 'ETH', 'LINK']
 
 timeframes = {
-    '5m': {'interval': '5m', 'period': '59d', 'horizon': 1, 'min_interval_seconds': 4 * 60},
-    '15m': {'interval': '15m', 'period': '59d', 'horizon': 1, 'min_interval_seconds': 14 * 60},
-    '1h': {'interval': '1h', 'period': '365d', 'horizon': 1, 'min_interval_seconds': 55 * 60},
-    '1d': {'interval': '1d', 'period': '365d', 'horizon': 1, 'min_interval_seconds': 23 * 3600},
-    '1w': {'interval': '1wk', 'period': '365d', 'horizon': 1, 'min_interval_seconds': 6 * 86400},
-    '1m': {'interval': '1mo', 'period': '365d', 'horizon': 1, 'min_interval_seconds': 25 * 86400},
+    '5m': {'interval': '5m', 'limit': 500, 'horizon': 1, 'min_interval_seconds': 4 * 60},
+    '15m': {'interval': '15m', 'limit': 500, 'horizon': 1, 'min_interval_seconds': 14 * 60},
+    '1h': {'interval': '1h', 'limit': 500, 'horizon': 1, 'min_interval_seconds': 55 * 60},
+    '1d': {'interval': '1d', 'limit': 365, 'horizon': 1, 'min_interval_seconds': 23 * 3600},
+    '1w': {'interval': '1w', 'limit': 100, 'horizon': 1, 'min_interval_seconds': 6 * 86400},
+    '1m': {'interval': '1M', 'limit': 60, 'horizon': 1, 'min_interval_seconds': 25 * 86400},
 }
 
 base_features = [
@@ -180,29 +161,21 @@ def update_dynamic_weights(state, preds, current_price):
     state['model_weights'] = {k: float(v / total_inv) for k, v in inv_errors.items()}
     return state
 
-def fetch_data_safely(ticker, tf_info):
+def fetch_data_safely(symbol, tf_info):
     try:
-        df = yf.download(ticker, period=tf_info['period'], interval=tf_info['interval'], progress=False)
-        if df is None or df.empty:
+        exchange = ccxt.kucoin({
+            'enableRateLimit': True,
+        })
+        ohlcv = exchange.fetch_ohlcv(symbol, timeframe=tf_info['interval'], limit=tf_info['limit'])
+        if not ohlcv:
             return pd.DataFrame()
 
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
-
-        df = df.reset_index()
-        date_col = 'Datetime' if 'Datetime' in df.columns else ('Date' if 'Date' in df.columns else df.columns[0])
-        df = df.rename(columns={
-            date_col: 'Date',
-            'Open': 'open',
-            'High': 'high',
-            'Low': 'low',
-            'Close': 'close',
-            'Volume': 'volume'
-        })
-        df['Date'] = pd.to_datetime(df['Date'])
-        df.set_index('Date', inplace=True)
+        df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+        df['Date'] = pd.to_datetime(df['timestamp'], unit='ms')
+        df.drop(columns=['timestamp'], inplace=True)
         return df.reset_index(drop=True)
-    except Exception:
+    except Exception as e:
+        print(f"❌ KuCoin fetch fout voor {symbol}: {e}")
         return pd.DataFrame()
 
 def push_to_github():
@@ -217,26 +190,21 @@ def push_to_github():
         subprocess.run(['git', 'config', 'user.email', 'render-worker@bot.com'], capture_output=True, text=True)
         subprocess.run(['git', 'config', 'user.name', 'Render Quant Bot'], capture_output=True, text=True)
         
-        # 1. Zet gewijzigde JSON bestanden direct in de staging area
         subprocess.run(['git', 'add', '*.json'], capture_output=True, text=True)
 
-        # 2. Controleer of er daadwerkelijk wijzigingen zijn
         status = subprocess.run(['git', 'status', '--porcelain'], capture_output=True, text=True)
         if not status.stdout or not status.stdout.strip():
             print("ℹ️ Geen gewijzigde JSON-bestanden gedetecteerd om te pushen.")
             return
 
-        # 3. Commit lokaal zodat de working directory weer schoon is
         commit_res = subprocess.run(['git', 'commit', '-m', 'Auto-update Smart Evolutionary Ensemble [skip ci]'], capture_output=True, text=True)
         print(f"📝 Git commit status: {commit_res.stdout.strip()}")
 
-        # 4. Pull nu veilig met rebase (nu de werkomgeving schoon is)
         pull_res = subprocess.run(['git', 'pull', '--rebase', repo_url, 'main'], capture_output=True, text=True)
         if pull_res.returncode != 0:
             print(f"⚠️ Git pull waarschuwing/fout: {pull_res.stderr.strip()}")
             subprocess.run(['git', 'rebase', '--abort'], capture_output=True, text=True)
 
-        # 5. Push naar GitHub
         push_res = subprocess.run(['git', 'push', repo_url, 'HEAD:main'], capture_output=True, text=True)
         if push_res.returncode == 0:
             print("✅ JSON-bestanden succesvol gepusht naar GitHub!")
@@ -250,17 +218,18 @@ def main():
     current_time = time.time()
     
     for asset in assets:
-        ticker = f'{asset}-USD'
+        symbol = f'{asset}/USDT'
         for tf_name, tf_info in timeframes.items():
             state_file = f'model_state_{asset.lower()}_{tf_name}.json'
             try:
                 state = load_or_init_state(state_file)
                 
+                # Interval check voor ALLE timeframes (inclusief 15m)
                 last_trained = state.get('last_trained_timestamp', 0)
-                if tf_name != '15m' and (current_time - last_trained < tf_info['min_interval_seconds']):
+                if current_time - last_trained < tf_info['min_interval_seconds']:
                     continue
 
-                df = fetch_data_safely(ticker, tf_info)
+                df = fetch_data_safely(symbol, tf_info)
                 if df is None or df.empty or len(df) < 60:
                     continue
 
@@ -462,9 +431,13 @@ def main():
 
                 del model_xgb, model_cat, model_rf, df, df_clean, df_train, X, y_reg, y_class
                 gc.collect()
-                time.sleep(2)
-            except Exception:
+                time.sleep(1)
+            except Exception as e:
+                print(f"❌ Fout bij {asset} ({tf_name}): {e}")
                 gc.collect()
                 pass
 
     push_to_github()
+
+if __name__ == '__main__':
+    main()
