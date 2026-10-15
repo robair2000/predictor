@@ -1,13 +1,13 @@
 {
-    "learning_rate": 0.060000000000000005,
+    "learning_rate": 0.065,
     "max_depth": 4,
     "n_estimators": 50,
-    "baseline_error": 1.7260550860942203,
-    "last_prediction": 2452.008705394769,
-    "last_prediction_price": 2452.008705394769,
-    "search_direction": -1,
-    "lookback_window": 120,
-    "current_regime": "sideways",
+    "baseline_error": 4.548705394769058,
+    "last_prediction": 2447.5338382341693,
+    "last_prediction_price": 2447.5338382341693,
+    "search_direction": 1,
+    "lookback_window": 130,
+    "current_regime": "trending",
     "regime_features": {
         "trending": [
             "return_1",
@@ -26,7 +26,6 @@
             "ADX",
             "smc_zone_dist",
             "CMF",
-            "regime_score",
             "MACD_hist"
         ],
         "sideways": [
@@ -62,27 +61,26 @@
         "OBV_slope",
         "VWAP_dist",
         "Supertrend_dist",
-        "CMF",
-        "ATR_percentile",
         "lorentzian_dist",
-        "MACD_hist",
+        "ATR_percentile",
         "ADX",
-        "regime_score",
-        "smc_zone_dist"
+        "smc_zone_dist",
+        "CMF",
+        "MACD_hist"
     ],
-    "last_trained_timestamp": 1792105519.3152678,
+    "last_trained_timestamp": 1792105826.3085232,
     "model_weights": {
-        "xgb": 0.055854723219863324,
-        "cat": 0.07398880302747418,
-        "rf": 0.8701564737526625
+        "xgb": 0.6075072240768232,
+        "cat": 0.06534448993139134,
+        "rf": 0.32714828599178536
     },
     "model_errors": {
-        "xgb": 2.5142285156248363,
-        "cat": 1.8980106708609128,
-        "rf": 0.16138652523386554
+        "xgb": 0.12154296874996362,
+        "cat": 1.129984135624909,
+        "rf": 0.22570264774913085
     },
-    "direction_probability": 59.03705978393555,
-    "stop_loss": 2456.295714285714,
-    "take_profit": 2445.9871428571428,
-    "updated_at": 1792105519
+    "direction_probability": 51.10099792480469,
+    "stop_loss": 2443.616785714286,
+    "take_profit": 2453.865357142857,
+    "updated_at": 1792105826
 }
