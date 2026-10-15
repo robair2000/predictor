@@ -178,12 +178,16 @@ def execute_live_trades_scan():
                 with open(state_file_15m, 'r', encoding='utf-8') as f:
                     state_15m = json.load(f)
                     
-                    last_pred = state_15m.get('last_prediction')
+                    predicted_price = state_15m.get('last_prediction', 0.0)
                     prob = state_15m.get('direction_probability', 50.0)
                     
                     ticker = exchange.fetch_ticker(symbol)
                     current_price = ticker['last']
                     
+                    # --- CORRECTE RICHTINGSBEPALING (LONG VS SHORT) ---
+                    # Als de voorspelde prijs hoger is dan de huidige koers = Long (1), anders Short (0)
+                    last_pred = 1 if predicted_price > current_price else 0
+
                     # --- LIVE ATR & DYNAMIC SL/TP BEREKENING ---
                     current_atr = current_price * 0.015 
                     
@@ -217,19 +221,21 @@ def execute_live_trades_scan():
                     if os.path.exists(state_file_1h):
                         with open(state_file_1h, 'r', encoding='utf-8') as f_1h:
                             state_1h = json.load(f_1h)
-                            pred_1h = state_1h.get('last_prediction', 1)
+                            pred_1h_price = state_1h.get('last_prediction', current_price)
+                            pred_1h = 1 if pred_1h_price > current_price else 0
                             if last_pred != pred_1h:
                                 consensus_ok = False
 
                     if not consensus_ok:
-                        print(f"⚠️ Model Consensus Filter weigert {symbol}: 15m en 1h modellen zijn het oneens.")
+                        print(f"⚠️ Model Consensus Filter weigert {symbol}: 15m en 1h modellen zijn het oneens over de richting.")
                         continue
 
                     # --- FILTER 8: Bitcoin Macro-Correlatie ---
                     if ENABLE_BTC_CORRELATION and asset != 'BTC' and os.path.exists(btc_state_15m):
                         with open(btc_state_15m, 'r', encoding='utf-8') as f_btc:
                             btc_st = json.load(f_btc)
-                            btc_pred = btc_st.get('last_prediction', 1)
+                            btc_pred_price = btc_st.get('last_prediction', current_price)
+                            btc_pred = 1 if btc_pred_price > current_price else 0
                             if last_pred == 1 and btc_pred == 0:
                                 print(f"⚠️ BTC Correlatie Filter weigert {symbol} (Long): Bitcoin staat zelf op daling.")
                                 continue
@@ -268,7 +274,8 @@ def execute_live_trades_scan():
                     except Exception:
                         pass
 
-                    print(f"Beoordeling {symbol} -> Alle filters doorlopen! Kans: {prob:.1f}%, Move: {predicted_return_pct:.2f}%, RRR: {rrr:.2f}")
+                    direction_str = "LONG 📈" if last_pred == 1 else "SHORT 📉"
+                    print(f"Beoordeling {symbol} ({direction_str}) -> Alle filters doorlopen! Kans: {prob:.1f}%, Move: {predicted_return_pct:.2f}%, RRR: {rrr:.2f}")
 
                     # --- ALLES GOEDGEKEURD: UITVOEREN ---
                     if prob >= MIN_DIRECTION_PROBABILITY and predicted_return_pct >= MIN_PREDICTED_RETURN_PCT:
