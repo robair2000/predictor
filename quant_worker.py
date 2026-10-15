@@ -227,7 +227,6 @@ def push_to_github():
         pull_res = subprocess.run(['git', 'pull', '--rebase', repo_url, 'main'], capture_output=True, text=True)
         if pull_res.returncode != 0:
             print(f"⚠️ Git pull waarschuwing/fout: {pull_res.stderr.strip()}")
-            # Bij conflict: forceer lokale wijzigingen voorrang te geven of abort rebase indien nodig
             subprocess.run(['git', 'rebase', '--abort'], capture_output=True, text=True)
 
         # Voeg de JSON-bestanden toe
@@ -442,7 +441,6 @@ def main():
                 weights = state['model_weights']
 
                 next_prediction = sum(preds[m] * weights[m] for m in preds)
-                # Keep last_prediction as a price, but also store an explicit price field
                 state['last_prediction'] = float(next_prediction)
                 state['last_prediction_price'] = float(next_prediction)
 
@@ -450,12 +448,10 @@ def main():
                     clf_xgb = xgb.XGBClassifier(n_estimators=30, max_depth=3, random_state=42, eval_metric='logloss', verbosity=0, n_jobs=1)
                     clf_xgb.fit(X, y_class)
                     prob = clf_xgb.predict_proba(latest_features)[0][1]
-                    # keep direction_probability as percentage (0-100) for compatibility
                     state['direction_probability'] = float(prob * 100)
                 except Exception:
                     state['direction_probability'] = 50.0
 
-                # Explicitly set search_direction based on predicted price vs current price
                 state['search_direction'] = 1 if next_prediction > current_price else -1
 
                 if next_prediction > current_price:
@@ -465,7 +461,6 @@ def main():
                     state['stop_loss'] = float(current_price + (1.5 * current_atr))
                     state['take_profit'] = float(current_price - (2.5 * current_atr))
 
-                # record update timestamp
                 state['updated_at'] = int(current_time)
 
                 with open(state_file, 'w', encoding='utf-8') as f:
