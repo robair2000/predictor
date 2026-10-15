@@ -3,7 +3,7 @@ import os
 import streamlit as st
 import pandas as pd
 import numpy as np
-import yfinance as yf
+import ccxt
 
 # Pagina configuratie
 st.set_page_config(
@@ -23,12 +23,12 @@ asset_options = {
 }
 
 interval_options = {
-    '5 Minuten': {'interval': '5m', 'period': '59d', 'code': '5m'},
-    '15 Minuten': {'interval': '15m', 'period': '59d', 'code': '15m'},
-    '1 Uur': {'interval': '1h', 'period': '730d', 'code': '1h'},
-    '1 Dag': {'interval': '1d', 'period': 'max', 'code': '1d'},
-    '1 Week': {'interval': '1wk', 'period': 'max', 'code': '1w'},
-    '1 Maand': {'interval': '1mo', 'period': 'max', 'code': '1m'}
+    '5 Minuten': {'interval': '5m', 'limit': 500, 'code': '5m'},
+    '15 Minuten': {'interval': '15m', 'limit': 500, 'code': '15m'},
+    '1 Uur': {'interval': '1h', 'limit': 500, 'code': '1h'},
+    '1 Dag': {'interval': '1d', 'limit': 365, 'code': '1d'},
+    '1 Week': {'interval': '1w', 'limit': 100, 'code': '1w'},
+    '1 Maand': {'interval': '1M', 'limit': 60, 'code': '1m'}
 }
 
 selected_asset_name = st.sidebar.selectbox("Selecteer Asset", list(asset_options.keys()))
@@ -39,27 +39,19 @@ interval_info = interval_options[selected_interval_name]
 interval_code = interval_info['code']
 
 @st.cache_data(ttl=300)
-def load_dashboard_data(ticker, tf_info):
-    """Haalt de marktdata rechtstreeks op via yfinance."""
+def load_dashboard_data(symbol, tf_info):
+    """Haalt de marktdata rechtstreeks op via KuCoin (CCXT)."""
     try:
-        df = yf.download(ticker, period=tf_info['period'], interval=tf_info['interval'], progress=False)
-        if df is None or df.empty:
-            return None
-            
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
-            
-        df = df.reset_index()
-        date_col = 'Datetime' if 'Datetime' in df.columns else ('Date' if 'Date' in df.columns else df.columns[0])
-        df = df.rename(columns={
-            date_col: 'Date',
-            'Open': 'open',
-            'High': 'high',
-            'Low': 'low',
-            'Close': 'close',
-            'Volume': 'volume'
+        exchange = ccxt.kucoin({
+            'enableRateLimit': True,
         })
-        df['Date'] = pd.to_datetime(df['Date'])
+        ohlcv = exchange.fetch_ohlcv(symbol, timeframe=tf_info['interval'], limit=tf_info['limit'])
+        if not ohlcv:
+            return None
+
+        df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+        df['Date'] = pd.to_datetime(df['timestamp'], unit='ms')
+        df.drop(columns=['timestamp'], inplace=True)
         df.set_index('Date', inplace=True)
         
         # Technische indicatoren voor de RSI metric
@@ -71,12 +63,12 @@ def load_dashboard_data(ticker, tf_info):
         
         return df.dropna()
     except Exception as e:
-        st.error(f"Fout bij ophalen yfinance data: {e}")
+        st.error(f"Fout bij ophalen KuCoin data: {e}")
         return None
 
-# Haal live data op voor actuele koers en RSI
-ticker = f"{asset_code}-USD"
-df = load_dashboard_data(ticker, interval_info)
+# Haal live data op voor actuele koers en RSI via KuCoin
+symbol = f"{asset_code}/USDT"
+df = load_dashboard_data(symbol, interval_info)
 
 # State bestand naam volgt het formaat: model_state_{asset}_{timescale}.json
 state_file = f"model_state_{asset_code.lower()}_{interval_code}.json"
@@ -101,7 +93,7 @@ if df is not None and not df.empty:
                 
                 # Hoofdmetrics rij 1
                 col1, col2, col3, col4 = st.columns(4)
-                col1.metric("Huidige Koers (yfinance)", f"${current_price:,.2f}")
+                col1.metric("Huidige Koers (KuCoin)", f"${current_price:,.2f}")
                 col2.metric(f"Ensemble Voorspelling ({interval_code})", f"${predicted_price:,.2f}", delta=f"{pct_diff:+.2f}%")
                 col3.metric("RSI (14)", f"{df['RSI'].iloc[-1]:.1f}")
                 col4.metric("Adaptieve LR", f"{lr:.4f}" if isinstance(lr, float) else f"{lr}")
@@ -109,7 +101,7 @@ if df is not None and not df.empty:
                 # Extra institutionele metrics rij 2
                 col5, col6, col7, col8 = st.columns(4)
                 prob_color = "🟢" if prob >= 50 else "🔴"
-                col5.metric(f"{prob_color} De kans dat de prijs stijgt", f"{prob:.1f}%")
+                col5.metric(f"{prob_color} Kans op stijging", f"{prob:.1f}%")
                 col6.metric("Lookback-venster", f"{lookback} candles")
                 col7.metric("Stop-Loss (SL)", f"${sl:,.2f}" if sl > 0 else "N.v.t.")
                 col8.metric("Take-Profit (TP)", f"${tp:,.2f}" if tp > 0 else "N.v.t.")
@@ -119,7 +111,7 @@ if df is not None and not df.empty:
             st.markdown("---")
             
             # Model details uitklapmenu
-            with st.expander("🔍 Bekijk Model & State Details (Weging, Fouten & Parameters)"):
+            with st.expander("📊 Bekijk Model & State Details (Weging, Fouten & Parameters)"):
                 st.json(state)
                 
         except Exception as e:
@@ -127,4 +119,4 @@ if df is not None and not df.empty:
     else:
         st.warning(f"Model state-bestand `{state_file}` nog niet gevonden. Wacht op de eerste run van de achtergrond-worker.")
 else:
-    st.error("Kon geen marktdata ophalen via yfinance.")
+    st.error("Kon geen marktdata ophalen via KuCoin.")
