@@ -81,7 +81,7 @@ def load_or_init_state(state_file):
                 state.setdefault('active_features', base_features.copy())
                 state.setdefault('last_trained_timestamp', 0)
                 state.setdefault('current_regime', 'sideways')
-                
+                # ensure regime_features shape
                 if 'regime_features' not in state or not isinstance(state['regime_features'], dict):
                     state['regime_features'] = {
                         'trending': base_features.copy(),
@@ -90,16 +90,22 @@ def load_or_init_state(state_file):
                 else:
                     state['regime_features'].setdefault('trending', base_features.copy())
                     state['regime_features'].setdefault('sideways', base_features.copy())
-                
+                # model weights/errors
                 if 'model_weights' not in state:
                     state['model_weights'] = {}
                 if 'model_errors' not in state:
                     state['model_errors'] = {}
-                
                 initial_weight = 1.0 / len(models)
                 for m in models:
                     state['model_weights'].setdefault(m, initial_weight)
                     state['model_errors'].setdefault(m, float('inf'))
+                # ensure presence of standard metadata fields
+                state.setdefault('last_prediction', None)
+                state.setdefault('last_prediction_price', None)
+                state.setdefault('direction_probability', 50.0)
+                state.setdefault('stop_loss', 0.0)
+                state.setdefault('take_profit', 0.0)
+                state.setdefault('updated_at', 0)
                 return state
         except Exception:
             pass
@@ -111,6 +117,7 @@ def load_or_init_state(state_file):
         'n_estimators': 50,
         'baseline_error': float('inf'),
         'last_prediction': None,
+        'last_prediction_price': None,
         'search_direction': 1,
         'lookback_window': 150,
         'current_regime': 'sideways',
@@ -124,7 +131,8 @@ def load_or_init_state(state_file):
         'model_errors': {m: float('inf') for m in models},
         'direction_probability': 50.0,
         'stop_loss': 0.0,
-        'take_profit': 0.0
+        'take_profit': 0.0,
+        'updated_at': 0
     }
 
 def evaluate_and_adapt(state, current_price, current_regime):
@@ -411,15 +419,21 @@ def main():
                 weights = state['model_weights']
 
                 next_prediction = sum(preds[m] * weights[m] for m in preds)
-                state['last_prediction'] = next_prediction
+                # Keep last_prediction as a price, but also store an explicit price field
+                state['last_prediction'] = float(next_prediction)
+                state['last_prediction_price'] = float(next_prediction)
 
                 try:
                     clf_xgb = xgb.XGBClassifier(n_estimators=30, max_depth=3, random_state=42, eval_metric='logloss', verbosity=0, n_jobs=1)
                     clf_xgb.fit(X, y_class)
                     prob = clf_xgb.predict_proba(latest_features)[0][1]
+                    # keep direction_probability as percentage (0-100) for compatibility
                     state['direction_probability'] = float(prob * 100)
                 except Exception:
                     state['direction_probability'] = 50.0
+
+                # Explicitly set search_direction based on predicted price vs current price
+                state['search_direction'] = 1 if next_prediction > current_price else -1
 
                 if next_prediction > current_price:
                     state['stop_loss'] = float(current_price - (1.5 * current_atr))
@@ -427,6 +441,9 @@ def main():
                 else:
                     state['stop_loss'] = float(current_price + (1.5 * current_atr))
                     state['take_profit'] = float(current_price - (2.5 * current_atr))
+
+                # record update timestamp
+                state['updated_at'] = int(current_time)
 
                 with open(state_file, 'w', encoding='utf-8') as f:
                     json.dump(state, f, indent=4)
