@@ -217,21 +217,26 @@ def push_to_github():
         subprocess.run(['git', 'config', 'user.email', 'render-worker@bot.com'], capture_output=True, text=True)
         subprocess.run(['git', 'config', 'user.name', 'Render Quant Bot'], capture_output=True, text=True)
         
-        pull_res = subprocess.run(['git', 'pull', '--rebase', repo_url, 'main'], capture_output=True, text=True)
-        if pull_res.returncode != 0:
-            print(f"⚠️ Git pull waarschuwing/fout: {pull_res.stderr.strip()}")
-            subprocess.run(['git', 'rebase', '--abort'], capture_output=True, text=True)
-
+        # 1. Zet gewijzigde JSON bestanden direct in de staging area
         subprocess.run(['git', 'add', '*.json'], capture_output=True, text=True)
 
+        # 2. Controleer of er daadwerkelijk wijzigingen zijn
         status = subprocess.run(['git', 'status', '--porcelain'], capture_output=True, text=True)
         if not status.stdout or not status.stdout.strip():
             print("ℹ️ Geen gewijzigde JSON-bestanden gedetecteerd om te pushen.")
             return
 
+        # 3. Commit lokaal zodat de working directory weer schoon is
         commit_res = subprocess.run(['git', 'commit', '-m', 'Auto-update Smart Evolutionary Ensemble [skip ci]'], capture_output=True, text=True)
         print(f"📝 Git commit status: {commit_res.stdout.strip()}")
 
+        # 4. Pull nu veilig met rebase (nu de werkomgeving schoon is)
+        pull_res = subprocess.run(['git', 'pull', '--rebase', repo_url, 'main'], capture_output=True, text=True)
+        if pull_res.returncode != 0:
+            print(f"⚠️ Git pull waarschuwing/fout: {pull_res.stderr.strip()}")
+            subprocess.run(['git', 'rebase', '--abort'], capture_output=True, text=True)
+
+        # 5. Push naar GitHub
         push_res = subprocess.run(['git', 'push', repo_url, 'HEAD:main'], capture_output=True, text=True)
         if push_res.returncode == 0:
             print("✅ JSON-bestanden succesvol gepusht naar GitHub!")
