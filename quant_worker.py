@@ -27,18 +27,18 @@ logging.getLogger('yfinance').setLevel(logging.CRITICAL)
 logging.getLogger('xgboost').setLevel(logging.CRITICAL)
 
 # --- HARDCORE OS-NIVEAU OUTPUT ONDERDRUKKING ---
-def suppress_output():
-    try:
-        sys.stdout.flush()
-        sys.stderr.flush()
-        devnull = os.open(os.devnull, os.O_WRONLY)
-        os.dup2(devnull, 1)
-        os.dup2(devnull, 2)
-        os.close(devnull)
-    except Exception:
-        pass
+#def suppress_output():
+#    try:
+#        sys.stdout.flush()
+#        sys.stderr.flush()
+#        devnull = os.open(os.devnull, os.O_WRONLY)
+#        os.dup2(devnull, 1)
+#        os.dup2(devnull, 2)
+#        os.close(devnull)
+#    except Exception:
+#        pass
 
-suppress_output()
+#suppress_output()
 
 assets = ['BTC', 'ETH', 'LINK']
 
