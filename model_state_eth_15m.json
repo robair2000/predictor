@@ -1,26 +1,26 @@
 {
-    "learning_rate": 0.060000000000000005,
+    "learning_rate": 0.05500000000000001,
     "max_depth": 5,
     "n_estimators": 100,
     "previous_learning_rate": 0.055,
     "previous_max_depth": 5,
-    "baseline_error": 29.461938849547096,
-    "last_prediction": 2419.042282862727,
+    "baseline_error": 15.967726902897994,
+    "last_prediction": 2434.2004585221102,
     "search_direction": -1,
-    "lookback_window": 90,
+    "lookback_window": 100,
     "model_weights": {
-        "xgb": 0.4460958172144735,
-        "cat": 0.09573392665833333,
-        "rf": 0.4581702561271931
+        "xgb": 0.3815790420300321,
+        "cat": 0.08710735837008836,
+        "rf": 0.5313135995998796
     },
     "model_errors": {
-        "xgb": 1.384521484375,
-        "cat": 6.451518997347193,
-        "rf": 1.3480343488972721
+        "xgb": 2.12158203125,
+        "cat": 9.293718202057335,
+        "rf": 1.5236787429962533
     },
-    "direction_probability": 12.397475242614746,
-    "stop_loss": 2447.409885951451,
-    "take_profit": 2373.4099557059153,
+    "direction_probability": 16.299713134765625,
+    "stop_loss": 2463.021405901228,
+    "take_profit": 2388.3243495396205,
     "active_features": [
         "return_1",
         "dist_sma20",
@@ -33,15 +33,13 @@
         "OBV_slope",
         "VWAP_dist",
         "Supertrend_dist",
-        "regime_score",
-        "lorentzian_dist",
-        "ATR_percentile",
         "CMF",
-        "MACD_hist",
-        "ADX"
+        "regime_score",
+        "ADX",
+        "lorentzian_dist"
     ],
-    "last_trained_timestamp": 1792077352.4241822,
-    "current_regime": "trending",
+    "last_trained_timestamp": 1792081169.0110426,
+    "current_regime": "sideways",
     "regime_features": {
         "trending": [
             "return_1",
@@ -80,6 +78,6 @@
             "lorentzian_dist"
         ]
     },
-    "last_prediction_price": 2419.042282862727,
-    "updated_at": 1792077352
+    "last_prediction_price": 2434.2004585221102,
+    "updated_at": 1792081169
 }
