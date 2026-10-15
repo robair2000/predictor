@@ -1,26 +1,26 @@
 {
-    "learning_rate": 0.145,
+    "learning_rate": 0.13999999999999999,
     "max_depth": 5,
     "n_estimators": 100,
     "previous_learning_rate": 0.05,
     "previous_max_depth": 5,
-    "baseline_error": 43.136162383132614,
-    "last_prediction": 82424.18487325078,
+    "baseline_error": 50.284873250784585,
+    "last_prediction": 82405.42709592693,
     "search_direction": 1,
-    "lookback_window": 270,
+    "lookback_window": 280,
     "model_weights": {
-        "xgb": 0.42175872787676716,
-        "cat": 0.12857170764934386,
-        "rf": 0.44966956447388895
+        "xgb": 0.18941058507238256,
+        "cat": 0.04716247801067434,
+        "rf": 0.7634269369169431
     },
     "model_errors": {
-        "xgb": 28.890625,
-        "cat": 94.77103068218275,
-        "rf": 27.097393752992502
+        "xgb": 55.48281250000582,
+        "cat": 222.82611986866686,
+        "rf": 13.765602788116666
     },
-    "direction_probability": 73.59781646728516,
-    "stop_loss": 82167.78928571429,
-    "take_profit": 82819.01785714286,
+    "direction_probability": 71.0849838256836,
+    "stop_loss": 82140.98214285713,
+    "take_profit": 82762.09642857141,
     "active_features": [
         "return_1",
         "dist_sma20",
@@ -33,16 +33,15 @@
         "OBV_slope",
         "VWAP_dist",
         "Supertrend_dist",
-        "ATR_percentile",
-        "lorentzian_dist",
-        "MACD_hist",
-        "ADX",
-        "smc_zone_dist",
         "CMF",
-        "regime_score"
+        "regime_score",
+        "ATR_percentile",
+        "smc_zone_dist",
+        "MACD_hist",
+        "ADX"
     ],
-    "last_trained_timestamp": 1792093524.0472841,
-    "current_regime": "sideways",
+    "last_trained_timestamp": 1792094448.5946434,
+    "current_regime": "trending",
     "regime_features": {
         "trending": [
             "return_1",
@@ -60,7 +59,8 @@
             "regime_score",
             "ATR_percentile",
             "smc_zone_dist",
-            "MACD_hist"
+            "MACD_hist",
+            "ADX"
         ],
         "sideways": [
             "return_1",
@@ -83,6 +83,6 @@
             "regime_score"
         ]
     },
-    "last_prediction_price": 82424.18487325078,
-    "updated_at": 1792093524
+    "last_prediction_price": 82405.42709592693,
+    "updated_at": 1792094448
 }
