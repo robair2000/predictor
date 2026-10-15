@@ -2,8 +2,8 @@ import os
 import sys
 
 # --- PERMANENTE PYTHON-LEVEL OUTPUT ONDERDRUKKING ---
-sys.stdout = open(os.devnull, 'w')
-sys.stderr = open(os.devnull, 'w')
+# sys.stdout = open(os.devnull, 'w')
+# sys.stderr = open(os.devnull, 'w')
 
 # --- EXTREME OUTPUT & WARNING SUPPRESSION (DIRECT BIJ DE START) ---
 os.environ["PYTHONWARNINGS"] = "ignore"
