@@ -29,7 +29,7 @@ server_thread = threading.Thread(target=run_server, daemon=True)
 server_thread.start()
 
 
-# --- CONFIGURATIE FUTURES LIVE TRADING & 9 INSTITUTIONELE FILTERS ---
+# --- CONFIGURATIE FUTURES LIVE TRADING & GEOPTIMALISEERDE FILTERS ---
 ASSETS = ['BTC', 'ETH', 'LINK']
 TIMEFRAMES = ['15m', '1h']
 TRADE_CHECK_INTERVAL_SECONDS = 900    # Elke 15 minuten nieuwe trades zoeken
@@ -38,19 +38,18 @@ POSITION_CHECK_INTERVAL_SECONDS = 60  # Elke 1 minuut open posities / trailing s
 TRADE_AMOUNT_USDT = 5.0               # Jouw inzet per trade in USDT (marge)
 LEVERAGE = 10                         # Vaste hefboom van 10x
 
-# 1 t/m 5: Basis & Risico Filters
+# Basis & Risico Drempels
 MIN_DIRECTION_PROBABILITY = 60.0      # Minimale stijgings-/daalwinst kans (60%)
 MIN_PREDICTED_RETURN_PCT = 0.30       # Minimale verwachte koersbeweging in %
-MIN_RRR = 1.55                        # Minimale Risk/Reward Ratio
-MIN_ATR_PCT = 0.25                    # Minimale volatiliteit (% ATR)
-MAX_ATR_PCT = 5.5                     # Maximale volatiliteit (% ATR)
+MIN_RRR = 1.55                        # Minimale Risk/Reward Ratio (Harde filter)
+MIN_ATR_PCT = 0.25                    # Minimale volatiliteit (% ATR) (Harde filter)
+MAX_ATR_PCT = 5.5                     # Maximale volatiliteit (% ATR) (Harde filter)
 MAX_FUNDING_RATE = 0.0005             # Maximaal toegestane funding rate (0.05%)
 COOLDOWN_SECONDS = 3600               # 1 uur cooldown na een stop-loss of verlies
 
-# 6 t/m 9: Geavanceerde Quant Filters
+# Geavanceerde Quant Parameters
 MIN_ORDERBOOK_IMBALANCE = 0.55        # Orderboek druk (minstens 55% steun)
 ENABLE_BTC_CORRELATION = True         # Altcoins mogen niet tegen BTC in handelen
-AVOID_WEEKEND_ILLIQUID = True         # Controle op extreme illiquiditeit
 
 # Geheugen voor tracking
 active_trade_peaks = {}               # {symbol: {"peak_price": float, "sl": float}}
@@ -145,8 +144,8 @@ def manage_open_positions_and_trailing_stops():
                 symbol_cooldowns[symbol] = time.time()
 
 def execute_live_trades_scan():
-    """Voert de 9-staps filtering uit en zoekt naar nieuwe trades (draait elke 15 minuten)."""
-    print("--- [Futures Live Trader Worker] Start 9-staps geavanceerde filtering ---")
+    """Voert de filtering uit op basis van harde en zachte filters (puntsysteem) en zoekt naar nieuwe trades (draait elke 15 minuten)."""
+    print("--- [Futures Live Trader Worker] Start geoptimaliseerde scoring filtering ---")
     
     try:
         exchange.load_markets()
@@ -159,7 +158,7 @@ def execute_live_trades_scan():
         if symbol not in exchange.markets:
             symbol = f"{asset}/USDT"
 
-        # --- FILTER 5: Circuit Breaker / Cooldown na verlies ---
+        # --- CIRCUIT BREAKER / COOLDOWN ---
         if symbol in symbol_cooldowns:
             elapsed = time.time() - symbol_cooldowns[symbol]
             if elapsed < COOLDOWN_SECONDS:
@@ -184,8 +183,7 @@ def execute_live_trades_scan():
                     ticker = exchange.fetch_ticker(symbol)
                     current_price = ticker['last']
                     
-                    # --- CORRECTE RICHTINGSBEPALING (LONG VS SHORT) ---
-                    # Als de voorspelde prijs hoger is dan de huidige koers = Long (1), anders Short (0)
+                    # --- RICHTINGSBEPALING (LONG VS SHORT) ---
                     last_pred = 1 if predicted_price > current_price else 0
 
                     # --- LIVE ATR & DYNAMIC SL/TP BEREKENING ---
@@ -199,15 +197,15 @@ def execute_live_trades_scan():
                         take_profit_val = current_price - (3.0 * current_atr)
 
                     atr_pct = (current_atr / current_price) * 100
+                    predicted_return_pct = abs((take_profit_val - current_price) / current_price) * 100
 
-                    # --- FILTER 3: Volatiliteitsfilter ---
+                    # ==========================================
+                    # 1. HARDE FILTERS (Poortwachters)
+                    # ==========================================
                     if atr_pct < MIN_ATR_PCT or atr_pct > MAX_ATR_PCT:
                         print(f"⚠️ Volatiliteitsfilter weigert {symbol}: ATR {atr_pct:.2f}% valt buiten grenzen.")
                         continue
 
-                    predicted_return_pct = abs((take_profit_val - current_price) / current_price) * 100
-
-                    # --- FILTER 2: Risk/Reward Ratio (RRR) ---
                     risk = abs(current_price - stop_loss_val)
                     reward = abs(take_profit_val - current_price)
                     rrr = reward / risk if risk > 0 else 0
@@ -216,7 +214,13 @@ def execute_live_trades_scan():
                         print(f"⚠️ RRR filter weigert {symbol}: RRR is {rrr:.2f} (minimaal {MIN_RRR})")
                         continue
 
-                    # --- FILTER 6: Model Consensus Filter (15m en 1h) ---
+                    # ==========================================
+                    # 2. ZACHTE FILTERS (Puntensysteem / Weging)
+                    # ==========================================
+                    score = 0
+                    max_score = 4
+
+                    # Zacht filter 1: Model Consensus (15m en 1h eensgezind)
                     consensus_ok = True
                     if os.path.exists(state_file_1h):
                         with open(state_file_1h, 'r', encoding='utf-8') as f_1h:
@@ -225,60 +229,74 @@ def execute_live_trades_scan():
                             pred_1h = 1 if pred_1h_price > current_price else 0
                             if last_pred != pred_1h:
                                 consensus_ok = False
+                    
+                    if consensus_ok:
+                        score += 1
+                    else:
+                        print(f"ℹ️ [Score] 15m en 1h modellen oneens over richting voor {symbol} (-1 punt).")
 
-                    if not consensus_ok:
-                        print(f"⚠️ Model Consensus Filter weigert {symbol}: 15m en 1h modellen zijn het oneens over de richting.")
-                        continue
-
-                    # --- FILTER 8: Bitcoin Macro-Correlatie ---
+                    # Zacht filter 2: Bitcoin Macro-Correlatie
+                    btc_corr_ok = True
                     if ENABLE_BTC_CORRELATION and asset != 'BTC' and os.path.exists(btc_state_15m):
                         with open(btc_state_15m, 'r', encoding='utf-8') as f_btc:
                             btc_st = json.load(f_btc)
                             btc_pred_price = btc_st.get('last_prediction', current_price)
                             btc_pred = 1 if btc_pred_price > current_price else 0
                             if last_pred == 1 and btc_pred == 0:
-                                print(f"⚠️ BTC Correlatie Filter weigert {symbol} (Long): Bitcoin staat zelf op daling.")
-                                continue
+                                btc_corr_ok = False
+                    
+                    if btc_corr_ok:
+                        score += 1
+                    else:
+                        print(f"ℹ️ [Score] Tegen BTC-trend in voor {symbol} (-1 punt).")
 
-                    # --- FILTER 7: Orderbook Imbalance Filter ---
+                    # Zacht filter 3: Orderboek Imbalance
+                    orderbook_ok = True
                     try:
                         orderbook = exchange.fetch_order_book(symbol, limit=20)
                         bids_vol = sum([bid[1] for bid in orderbook.get('bids', [])])
                         asks_vol = sum([ask[1] for ask in orderbook.get('asks', [])])
                         total_vol = bids_vol + asks_vol
-                        
                         if total_vol > 0:
                             bid_ratio = bids_vol / total_vol
                             ask_ratio = asks_vol / total_vol
-                            
                             if last_pred == 1 and bid_ratio < MIN_ORDERBOOK_IMBALANCE:
-                                print(f"⚠️ Orderboek Filter weigert {symbol} (Long): Onvoldoende koopdruk ({bid_ratio:.2f}).")
-                                continue
+                                orderbook_ok = False
                             elif last_pred == 0 and ask_ratio < MIN_ORDERBOOK_IMBALANCE:
-                                print(f"⚠️ Orderboek Filter weigert {symbol} (Short): Onvoldoende verkoopdruk ({ask_ratio:.2f}).")
-                                continue
+                                orderbook_ok = False
                     except Exception:
                         pass
 
-                    # --- FILTER 4: Funding Rate Filter ---
+                    if orderbook_ok:
+                        score += 1
+                    else:
+                        print(f"ℹ️ [Score] Onvoldoende orderboek druk voor {symbol} (-1 punt).")
+
+                    # Zacht filter 4: Funding Rate
+                    funding_ok = True
                     try:
                         funding_data = exchange.fetch_funding_rate(symbol)
                         current_funding = funding_data.get('fundingRate', 0.0)
                         if current_funding is not None:
                             if last_pred == 1 and current_funding > MAX_FUNDING_RATE:
-                                print(f"⚠️ Funding Rate te hoog voor Long op {symbol}: {current_funding:.5f}")
-                                continue
+                                funding_ok = False
                             elif last_pred == 0 and current_funding < -MAX_FUNDING_RATE:
-                                print(f"⚠️ Funding Rate te ongunstig voor Short op {symbol}: {current_funding:.5f}")
-                                continue
+                                funding_ok = False
                     except Exception:
                         pass
 
-                    direction_str = "LONG 📈" if last_pred == 1 else "SHORT 📉"
-                    print(f"Beoordeling {symbol} ({direction_str}) -> Alle filters doorlopen! Kans: {prob:.1f}%, Move: {predicted_return_pct:.2f}%, RRR: {rrr:.2f}")
+                    if funding_ok:
+                        score += 1
+                    else:
+                        print(f"ℹ️ [Score] Ongunstige funding rate voor {symbol} (-1 punt).")
 
-                    # --- ALLES GOEDGEKEURD: UITVOEREN ---
-                    if prob >= MIN_DIRECTION_PROBABILITY and predicted_return_pct >= MIN_PREDICTED_RETURN_PCT:
+                    MINIMUM_REQUIRED_SCORE = 2  # Minimaal 2 van de 4 punten vereist
+
+                    direction_str = "LONG 📈" if last_pred == 1 else "SHORT 📉"
+                    print(f"Beoordeling {symbol} ({direction_str}) -> Score: {score}/{max_score} | Kans: {prob:.1f}%, Move: {predicted_return_pct:.2f}%, RRR: {rrr:.2f}")
+
+                    # --- UITVOERING OP BASIS VAN PUNTEN & DREMPEL ---
+                    if prob >= MIN_DIRECTION_PROBABILITY and predicted_return_pct >= MIN_PREDICTED_RETURN_PCT and score >= MINIMUM_REQUIRED_SCORE:
                         try:
                             exchange.set_leverage(LEVERAGE, symbol)
                         except Exception:
@@ -287,25 +305,21 @@ def execute_live_trades_scan():
                         position_usdt_value = TRADE_AMOUNT_USDT * LEVERAGE
                         amount = position_usdt_value / current_price
 
+                        params = {
+                            'stopLoss': {'triggerPrice': stop_loss_val},
+                            'takeProfit': {'triggerPrice': take_profit_val},
+                        }
+
                         if last_pred == 1:
-                            print(f"🔥 Alle filters geslaagd! Sterk LONG signaal voor {symbol}!")
-                            params = {
-                                'stopLoss': {'triggerPrice': stop_loss_val},
-                                'takeProfit': {'triggerPrice': take_profit_val},
-                            }
+                            print(f"🔥 Puntsysteem geslaagd ({score}/{max_score})! Sterk LONG signaal voor {symbol}!")
                             order = exchange.create_order(symbol, 'market', 'buy', amount, None, params)
                             print(f"✅ Long order geplaatst: {order.get('id')}")
-                            
-                        elif last_pred == 0:
-                            print(f"🔥 Alle filters geslaagd! Sterk SHORT signaal voor {symbol}!")
-                            params = {
-                                'stopLoss': {'triggerPrice': stop_loss_val},
-                                'takeProfit': {'triggerPrice': take_profit_val},
-                            }
+                        else:
+                            print(f"🔥 Puntsysteem geslaagd ({score}/{max_score})! Sterk SHORT signaal voor {symbol}!")
                             order = exchange.create_order(symbol, 'market', 'sell', amount, None, params)
                             print(f"✅ Short order geplaatst: {order.get('id')}")
                     else:
-                        print(f"ℹ️ Signaal onder drempelwaarde voor {symbol}.")
+                        print(f"ℹ️ Signaal onder drempelwaarde of onvoldoende score ({score}/{max_score}) voor {symbol}.")
 
             except Exception as e:
                 print(f"Fout bij verwerken filters voor {asset}: {e}")
@@ -323,7 +337,7 @@ if __name__ == '__main__':
         except Exception as e:
             print(f"Fout in positiebeheer lus: {e}")
             
-        # 2. Zoek naar nieuwe trades via de 9 filters (draait elke 15 minuten)
+        # 2. Zoek naar nieuwe trades via het puntsysteem (draait elke 15 minuten)
         if current_time - last_trade_check_time >= TRADE_CHECK_INTERVAL_SECONDS:
             try:
                 execute_live_trades_scan()
