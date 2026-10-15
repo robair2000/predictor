@@ -1,26 +1,26 @@
 {
-    "learning_rate": 0.04500000000000001,
+    "learning_rate": 0.05000000000000001,
     "max_depth": 5,
     "n_estimators": 100,
     "previous_learning_rate": 0.045000000000000005,
     "previous_max_depth": 5,
-    "baseline_error": 0.005256873313522092,
-    "last_prediction": 12.561768109848352,
+    "baseline_error": 0.009368109848351125,
+    "last_prediction": 12.544521750410423,
     "search_direction": -1,
-    "lookback_window": 200,
+    "lookback_window": 210,
     "model_weights": {
-        "xgb": 0.6880493082957098,
-        "cat": 0.11202002108962035,
-        "rf": 0.1999306706146699
+        "xgb": 0.4474717545267047,
+        "cat": 0.09831439219450562,
+        "rf": 0.45421385327878966
     },
     "model_errors": {
-        "xgb": 0.010365377807616483,
-        "cat": 0.0636662689550942,
-        "rf": 0.03567184509517318
+        "xgb": 0.01760614624023482,
+        "cat": 0.08013329955352688,
+        "rf": 0.01734481021281198
     },
-    "direction_probability": 82.38211822509766,
-    "stop_loss": 12.630678571428572,
-    "take_profit": 12.465935714285713,
+    "direction_probability": 66.25369262695312,
+    "stop_loss": 12.613353571428572,
+    "take_profit": 12.450810714285714,
     "active_features": [
         "return_1",
         "dist_sma20",
@@ -34,14 +34,13 @@
         "VWAP_dist",
         "Supertrend_dist",
         "MACD_hist",
-        "smc_zone_dist",
         "CMF",
         "regime_score",
         "ATR_percentile",
         "lorentzian_dist",
         "ADX"
     ],
-    "last_trained_timestamp": 1792102524.8323047,
+    "last_trained_timestamp": 1792103437.774279,
     "current_regime": "trending",
     "regime_features": {
         "trending": [
@@ -57,7 +56,6 @@
             "VWAP_dist",
             "Supertrend_dist",
             "MACD_hist",
-            "smc_zone_dist",
             "CMF",
             "regime_score",
             "ATR_percentile",
@@ -85,6 +83,6 @@
             "lorentzian_dist"
         ]
     },
-    "last_prediction_price": 12.561768109848352,
-    "updated_at": 1792102524
+    "last_prediction_price": 12.544521750410423,
+    "updated_at": 1792103437
 }
