@@ -213,30 +213,45 @@ def fetch_data_safely(ticker, tf_info):
 def push_to_github():
     github_token = os.environ.get('GITHUB_TOKEN')
     if not github_token:
+        print("❌ Geen GITHUB_TOKEN gevonden in environment variables!")
         return
     try:
         repo_url = f'https://{github_token}@github.com/robair2000/predictor.git'
+        print("🔄 Bezig met synchroniseren en pushen naar GitHub...")
         
-        with open(os.devnull, 'wb') as devnull:
-            subprocess.run(['git', 'config', 'user.email', 'render-worker@bot.com'], stdout=devnull, stderr=devnull, stdin=subprocess.DEVNULL)
-            subprocess.run(['git', 'config', 'user.name', 'Render Quant Bot'], stdout=devnull, stderr=devnull, stdin=subprocess.DEVNULL)
-            
-            # Haal eerst de nieuwste wijzigingen van GitHub op om conflicten te voorkomen
-            subprocess.run(['git', 'pull', '--rebase', repo_url, 'main'], stdout=devnull, stderr=devnull, stdin=subprocess.DEVNULL)
-            
-            # Voeg alleen de JSON-bestanden toe
-            subprocess.run(['git', 'add', '*.json'], stdout=devnull, stderr=devnull, stdin=subprocess.DEVNULL)
+        # Configureer git credentials
+        subprocess.run(['git', 'config', 'user.email', 'render-worker@bot.com'], capture_output=True, text=True)
+        subprocess.run(['git', 'config', 'user.name', 'Render Quant Bot'], capture_output=True, text=True)
+        
+        # Pull met rebase om conflicten te voorkomen
+        pull_res = subprocess.run(['git', 'pull', '--rebase', repo_url, 'main'], capture_output=True, text=True)
+        if pull_res.returncode != 0:
+            print(f"⚠️ Git pull waarschuwing/fout: {pull_res.stderr.strip()}")
+            # Bij conflict: forceer lokale wijzigingen voorrang te geven of abort rebase indien nodig
+            subprocess.run(['git', 'rebase', '--abort'], capture_output=True, text=True)
 
-            status = subprocess.run(['git', 'status', '--porcelain'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, stdin=subprocess.DEVNULL)
-            if not status.stdout or not status.stdout.strip():
-                return
+        # Voeg de JSON-bestanden toe
+        subprocess.run(['git', 'add', '*.json'], capture_output=True, text=True)
 
-            subprocess.run(['git', 'commit', '-m', 'Auto-update Smart Evolutionary Ensemble [skip ci]'], stdout=devnull, stderr=devnull, stdin=subprocess.DEVNULL)
+        # Controleer of er daadwerkelijk wijzigingen zijn
+        status = subprocess.run(['git', 'status', '--porcelain'], capture_output=True, text=True)
+        if not status.stdout or not status.stdout.strip():
+            print("ℹ️ Geen gewijzigde JSON-bestanden gedetecteerd om te pushen.")
+            return
+
+        # Commit de wijzigingen
+        commit_res = subprocess.run(['git', 'commit', '-m', 'Auto-update Smart Evolutionary Ensemble [skip ci]'], capture_output=True, text=True)
+        print(f"📝 Git commit status: {commit_res.stdout.strip()}")
+
+        # Push naar GitHub
+        push_res = subprocess.run(['git', 'push', repo_url, 'HEAD:main'], capture_output=True, text=True)
+        if push_res.returncode == 0:
+            print("✅ JSON-bestanden succesvol gepusht naar GitHub!")
+        else:
+            print(f"❌ Git push mislukt: {push_res.stderr.strip()}")
             
-            # Veilige push ZONDER --force, zodat je code op main intact blijft!
-            subprocess.run(['git', 'push', repo_url, 'HEAD:main'], stdout=devnull, stderr=devnull, stdin=subprocess.DEVNULL)
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"❌ Onverwachte fout bij push_to_github: {e}")
 
 def main():
     current_time = time.time()
