@@ -32,23 +32,25 @@ server_thread.start()
 # --- CONFIGURATIE FUTURES LIVE TRADING & 9 INSTITUTIONELE FILTERS ---
 ASSETS = ['BTC', 'ETH', 'LINK']
 TIMEFRAMES = ['15m', '1h']
-CHECK_INTERVAL_SECONDS = 900          # Elke 15 minuten controleren
-TRADE_AMOUNT_USDT = 5.0              # Jouw inzet per trade in USDT (marge)
-LEVERAGE = 10                          # Vaste hefboom van 5x
+TRADE_CHECK_INTERVAL_SECONDS = 900    # Elke 15 minuten nieuwe trades zoeken
+POSITION_CHECK_INTERVAL_SECONDS = 60  # Elke 1 minuut open posities / trailing stops controleren
 
-# 1 t/m 5: Basis & Risico Filters (Geoptimaliseerd voor 15m)
-MIN_DIRECTION_PROBABILITY = 60.0      # Filter: Minimale stijgings-/daalwinst kans (72%)
-MIN_PREDICTED_RETURN_PCT = 0.30       # Filter: Minimale verwachte koersbeweging in %
-MIN_RRR = 1.55                         # Filter 2: Minimale Risk/Reward Ratio
-MIN_ATR_PCT = 0.25                     # Filter 3: Minimale volatiliteit (% ATR) tegen dode markten
-MAX_ATR_PCT = 5.5                     # Filter 3: Maximale volatiliteit (% ATR) tegen extreme chaos
-MAX_FUNDING_RATE = 0.0005             # Filter 4: Maximaal toegestane funding rate (0.05%)
-COOLDOWN_SECONDS = 3600               # Filter 5: 1 uur cooldown na een stop-loss of verlies
+TRADE_AMOUNT_USDT = 5.0               # Jouw inzet per trade in USDT (marge)
+LEVERAGE = 10                         # Vaste hefboom van 10x
 
-# 6 t/m 9: Geavanceerde "Magische" Quant Filters
-MIN_ORDERBOOK_IMBALANCE = 0.55        # Filter 7: Orderboek druk (minstens 55% steun)
-ENABLE_BTC_CORRELATION = True         # Filter 8: Altcoins mogen niet tegen BTC in handelen
-AVOID_WEEKEND_ILLIQUID = True         # Filter 9: Controle op extreme illiquiditeit
+# 1 t/m 5: Basis & Risico Filters
+MIN_DIRECTION_PROBABILITY = 60.0      # Minimale stijgings-/daalwinst kans (60%)
+MIN_PREDICTED_RETURN_PCT = 0.30       # Minimale verwachte koersbeweging in %
+MIN_RRR = 1.55                        # Minimale Risk/Reward Ratio
+MIN_ATR_PCT = 0.25                    # Minimale volatiliteit (% ATR)
+MAX_ATR_PCT = 5.5                     # Maximale volatiliteit (% ATR)
+MAX_FUNDING_RATE = 0.0005             # Maximaal toegestane funding rate (0.05%)
+COOLDOWN_SECONDS = 3600               # 1 uur cooldown na een stop-loss of verlies
+
+# 6 t/m 9: Geavanceerde Quant Filters
+MIN_ORDERBOOK_IMBALANCE = 0.55        # Orderboek druk (minstens 55% steun)
+ENABLE_BTC_CORRELATION = True         # Altcoins mogen niet tegen BTC in handelen
+AVOID_WEEKEND_ILLIQUID = True         # Controle op extreme illiquiditeit
 
 # Geheugen voor tracking
 active_trade_peaks = {}               # {symbol: {"peak_price": float, "sl": float}}
@@ -66,7 +68,7 @@ exchange = ccxt.kucoin({
 })
 
 def manage_open_positions_and_trailing_stops():
-    """Beheert open posities, past trailing stops toe en sluit bij tegenwind of trailing stop hit."""
+    """Beheert open posities, past trailing stops toe en sluit bij tegenwind of trailing stop hit (draait elke minuut)."""
     try:
         positions = exchange.fetch_positions()
     except Exception as e:
@@ -142,7 +144,8 @@ def manage_open_positions_and_trailing_stops():
                 del active_trade_peaks[symbol]
                 symbol_cooldowns[symbol] = time.time()
 
-def execute_live_trades():
+def execute_live_trades_scan():
+    """Voert de 9-staps filtering uit en zoekt naar nieuwe trades (draait elke 15 minuten)."""
     print("--- [Futures Live Trader Worker] Start 9-staps geavanceerde filtering ---")
     
     try:
@@ -150,8 +153,6 @@ def execute_live_trades():
     except Exception as e:
         print(f"Fout bij verbinden met KuCoin Futures: {e}")
         return
-
-    manage_open_positions_and_trailing_stops()
 
     for asset in ASSETS:
         symbol = f"{asset}/USDT:USDT"
@@ -183,20 +184,19 @@ def execute_live_trades():
                     ticker = exchange.fetch_ticker(symbol)
                     current_price = ticker['last']
                     
-                    # --- LIVE ATR & DYNAMIC SL/TP BEREKENING (Gegarandeerd correcte RRR) ---
-                    # We gebruiken 1.5% van de live prijs als veilige ATR-basis of leiden dit af
+                    # --- LIVE ATR & DYNAMIC SL/TP BEREKENING ---
                     current_atr = current_price * 0.015 
                     
                     if last_pred == 1: # Long
                         stop_loss_val = current_price - (1.5 * current_atr)
-                        take_profit_val = current_price + (3.0 * current_atr) # RRR = 3.0 / 1.5 = 2.0
+                        take_profit_val = current_price + (3.0 * current_atr)
                     else: # Short
                         stop_loss_val = current_price + (1.5 * current_atr)
-                        take_profit_val = current_price - (3.0 * current_atr) # RRR = 3.0 / 1.5 = 2.0
+                        take_profit_val = current_price - (3.0 * current_atr)
 
                     atr_pct = (current_atr / current_price) * 100
 
-                    # --- FILTER 3: Volatiliteitsfilter (ATR bandbreedte) ---
+                    # --- FILTER 3: Volatiliteitsfilter ---
                     if atr_pct < MIN_ATR_PCT or atr_pct > MAX_ATR_PCT:
                         print(f"⚠️ Volatiliteitsfilter weigert {symbol}: ATR {atr_pct:.2f}% valt buiten grenzen.")
                         continue
@@ -225,7 +225,7 @@ def execute_live_trades():
                         print(f"⚠️ Model Consensus Filter weigert {symbol}: 15m en 1h modellen zijn het oneens.")
                         continue
 
-                    # --- FILTER 8: Bitcoin Macro-Correlatie (voor altcoins) ---
+                    # --- FILTER 8: Bitcoin Macro-Correlatie ---
                     if ENABLE_BTC_CORRELATION and asset != 'BTC' and os.path.exists(btc_state_15m):
                         with open(btc_state_15m, 'r', encoding='utf-8') as f_btc:
                             btc_st = json.load(f_btc)
@@ -304,7 +304,25 @@ def execute_live_trades():
                 print(f"Fout bij verwerken filters voor {asset}: {e}")
 
 if __name__ == '__main__':
-    print("Futures Live Trader Worker is gestart (24/7)...")
+    print("Futures Live Trader Worker is gestart met 1-minuut positie-bewaking (24/7)...")
+    last_trade_check_time = 0
+
     while True:
-        execute_live_trades()
-        time.sleep(CHECK_INTERVAL_SECONDS)
+        current_time = time.time()
+        
+        # 1. Beheer open posities en trailing stops (draait ALTIJD elke minuut)
+        try:
+            manage_open_positions_and_trailing_stops()
+        except Exception as e:
+            print(f"Fout in positiebeheer lus: {e}")
+            
+        # 2. Zoek naar nieuwe trades via de 9 filters (draait elke 15 minuten)
+        if current_time - last_trade_check_time >= TRADE_CHECK_INTERVAL_SECONDS:
+            try:
+                execute_live_trades_scan()
+            except Exception as e:
+                print(f"Fout in trades scan lus: {e}")
+            last_trade_check_time = time.time()
+            
+        # Slaap kort tot de volgende minuut-check
+        time.sleep(POSITION_CHECK_INTERVAL_SECONDS)
