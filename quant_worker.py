@@ -9,8 +9,6 @@ sys.stderr = open(os.devnull, 'w')
 os.environ["PYTHONWARNINGS"] = "ignore"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
-import threading
-from http.server import HTTPServer, BaseHTTPRequestHandler
 import json
 import subprocess
 import time
@@ -82,7 +80,6 @@ def load_or_init_state(state_file):
                 state.setdefault('active_features', base_features.copy())
                 state.setdefault('last_trained_timestamp', 0)
                 state.setdefault('current_regime', 'sideways')
-                # ensure regime_features shape
                 if 'regime_features' not in state or not isinstance(state['regime_features'], dict):
                     state['regime_features'] = {
                         'trending': base_features.copy(),
@@ -91,7 +88,6 @@ def load_or_init_state(state_file):
                 else:
                     state['regime_features'].setdefault('trending', base_features.copy())
                     state['regime_features'].setdefault('sideways', base_features.copy())
-                # model weights/errors
                 if 'model_weights' not in state:
                     state['model_weights'] = {}
                 if 'model_errors' not in state:
@@ -100,7 +96,6 @@ def load_or_init_state(state_file):
                 for m in models:
                     state['model_weights'].setdefault(m, initial_weight)
                     state['model_errors'].setdefault(m, float('inf'))
-                # ensure presence of standard metadata fields
                 state.setdefault('last_prediction', None)
                 state.setdefault('last_prediction_price', None)
                 state.setdefault('direction_probability', 50.0)
@@ -219,30 +214,24 @@ def push_to_github():
         repo_url = f'https://{github_token}@github.com/robair2000/predictor.git'
         print("🔄 Bezig met synchroniseren en pushen naar GitHub...")
         
-        # Configureer git credentials
         subprocess.run(['git', 'config', 'user.email', 'render-worker@bot.com'], capture_output=True, text=True)
         subprocess.run(['git', 'config', 'user.name', 'Render Quant Bot'], capture_output=True, text=True)
         
-        # Pull met rebase om conflicten te voorkomen
         pull_res = subprocess.run(['git', 'pull', '--rebase', repo_url, 'main'], capture_output=True, text=True)
         if pull_res.returncode != 0:
             print(f"⚠️ Git pull waarschuwing/fout: {pull_res.stderr.strip()}")
             subprocess.run(['git', 'rebase', '--abort'], capture_output=True, text=True)
 
-        # Voeg de JSON-bestanden toe
         subprocess.run(['git', 'add', '*.json'], capture_output=True, text=True)
 
-        # Controleer of er daadwerkelijk wijzigingen zijn
         status = subprocess.run(['git', 'status', '--porcelain'], capture_output=True, text=True)
         if not status.stdout or not status.stdout.strip():
             print("ℹ️ Geen gewijzigde JSON-bestanden gedetecteerd om te pushen.")
             return
 
-        # Commit de wijzigingen
         commit_res = subprocess.run(['git', 'commit', '-m', 'Auto-update Smart Evolutionary Ensemble [skip ci]'], capture_output=True, text=True)
         print(f"📝 Git commit status: {commit_res.stdout.strip()}")
 
-        # Push naar GitHub
         push_res = subprocess.run(['git', 'push', repo_url, 'HEAD:main'], capture_output=True, text=True)
         if push_res.returncode == 0:
             print("✅ JSON-bestanden succesvol gepusht naar GitHub!")
@@ -474,36 +463,3 @@ def main():
                 pass
 
     push_to_github()
-
-# --- MINI WEBSERVER VOOR RENDER HEALTH CHECKS & CRON-JOB.ORG ---
-class HealthCheckHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        if self.path == '/run-worker':
-            threading.Thread(target=main, daemon=True).start()
-            self.send_response(200)
-            self.send_header('Content-type', 'text/plain')
-            self.end_headers()
-            self.wfile.write(b'Worker Started Successfully')
-        else:
-            self.send_response(200)
-            self.send_header('Content-type', 'text/plain')
-            self.end_headers()
-            self.wfile.write(b'Quant Worker Online')
-    
-    def log_message(self, format, *args):
-        pass
-
-def start_web_server():
-    try:
-        port = int(os.environ.get('PORT', 10000))
-        server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
-        server.serve_forever()
-    except Exception:
-        pass
-
-server_thread = threading.Thread(target=start_web_server, daemon=True)
-server_thread.start()
-
-if __name__ == '__main__':
-    while True:
-        time.sleep(3600)
