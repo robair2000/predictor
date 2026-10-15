@@ -1,13 +1,13 @@
 {
-    "learning_rate": 0.05,
+    "learning_rate": 0.045000000000000005,
     "max_depth": 4,
     "n_estimators": 50,
-    "baseline_error": 0.06031010079450283,
-    "last_prediction": 12.51407982401166,
-    "last_prediction_price": 12.51407982401166,
+    "baseline_error": 0.056420175988339594,
+    "last_prediction": 12.518764183167972,
+    "last_prediction_price": 12.518764183167972,
     "search_direction": -1,
-    "lookback_window": 150,
-    "current_regime": "sideways",
+    "lookback_window": 160,
+    "current_regime": "trending",
     "regime_features": {
         "trending": [
             "return_1",
@@ -26,7 +26,8 @@
             "CMF",
             "ATR_percentile",
             "ADX",
-            "lorentzian_dist"
+            "lorentzian_dist",
+            "regime_score"
         ],
         "sideways": [
             "return_1",
@@ -57,23 +58,27 @@
         "OBV_slope",
         "VWAP_dist",
         "Supertrend_dist",
-        "lorentzian_dist",
+        "MACD_hist",
+        "smc_zone_dist",
+        "CMF",
+        "ATR_percentile",
         "ADX",
-        "smc_zone_dist"
+        "lorentzian_dist",
+        "regime_score"
     ],
-    "last_trained_timestamp": 1792089925.4078243,
+    "last_trained_timestamp": 1792090224.1687207,
     "model_weights": {
-        "xgb": 0.2772634477819701,
-        "cat": 0.17959341678245427,
-        "rf": 0.5431431354355756
+        "xgb": 0.23764436654422638,
+        "cat": 0.1571635449756117,
+        "rf": 0.6051920884801619
     },
     "model_errors": {
-        "xgb": 0.06542535400390648,
-        "cat": 0.1010062647349308,
-        "rf": 0.03339829849848819
+        "xgb": 0.07256756591796787,
+        "cat": 0.10972820727425159,
+        "rf": 0.02849553040599595
     },
-    "direction_probability": 50.130523681640625,
-    "stop_loss": 12.605346428571428,
-    "take_profit": 12.507089285714287,
-    "updated_at": 1792089925
+    "direction_probability": 35.187232971191406,
+    "stop_loss": 12.604646428571428,
+    "take_profit": 12.513589285714286,
+    "updated_at": 1792090224
 }
