@@ -45,6 +45,7 @@ suppress_output()
 assets = ['BTC', 'ETH', 'LINK']
 
 timeframes = {
+    '5m': {'interval': '5m', 'period': '59d', 'horizon': 1, 'min_interval_seconds': 4 * 60},
     '15m': {'interval': '15m', 'period': '59d', 'horizon': 1, 'min_interval_seconds': 14 * 60},
     '1h': {'interval': '1h', 'period': '365d', 'horizon': 1, 'min_interval_seconds': 55 * 60},
     '1d': {'interval': '1d', 'period': '365d', 'horizon': 1, 'min_interval_seconds': 23 * 3600},
