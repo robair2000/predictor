@@ -39,6 +39,8 @@ POSITION_CHECK_INTERVAL_SECONDS = 60  # Elke 1 minuut open posities / trailing s
 
 TRADE_AMOUNT_USDT = 6.0               # Totale gewenste positiewaarde in USDT (~$6 totaal met 10x hefboom)
 LEVERAGE = 10                         # Vaste hefboom van 10x
+# Maak gewenste margin mode expliciet en consistent (kan overschreven worden via env)
+DESIRED_MARGIN_MODE = os.environ.get('MARGIN_MODE', 'cross')
 
 # Basis & Risico Drempels
 MIN_DIRECTION_PROBABILITY = 60.0      # Minimale stijgings-/daalwinst kans (60%)
@@ -337,8 +339,6 @@ def execute_live_trades_scan():
 
                     # --- UITVOERING OP BASIS VAN PUNTEN & DREMPEL ---
                     if prob >= MIN_DIRECTION_PROBABILITY and predicted_return_pct >= MIN_PREDICTED_RETURN_PCT and score >= MINIMUM_REQUIRED_SCORE:
-                        # Config: gewenste margin mode (gebruik 'isolated' of 'cross')
-                        DESIRED_MARGIN_MODE = os.environ.get('MARGIN_MODE', 'cross')
 
                         # Probeer margin mode & leverage in te stellen, en alleen dan de order plaatsen
                         margin_and_leverage_ok = False
@@ -358,6 +358,32 @@ def execute_live_trades_scan():
                                         print(f"⚙️ Margin mode ingesteld op {DESIRED_MARGIN_MODE} voor {symbol}")
                                         # geef de exchange even de tijd om de instelling toe te passen
                                         time.sleep(0.5)
+                                        # probeer te verifiëren dat de margin mode is toegepast waar mogelijk
+                                        try:
+                                            if hasattr(exchange, 'fetch_margin_mode'):
+                                                current_mode = exchange.fetch_margin_mode(symbol)
+                                            elif hasattr(exchange, 'fetchMarginMode'):
+                                                current_mode = exchange.fetchMarginMode(symbol)
+                                            else:
+                                                current_mode = None
+                                            if isinstance(current_mode, dict):
+                                                # sommige implementaties returnen dicts
+                                                current_mode_val = current_mode.get('marginMode') or current_mode.get('mode') or str(current_mode)
+                                            else:
+                                                current_mode_val = current_mode
+
+                                            if current_mode_val is not None:
+                                                try:
+                                                    cm = str(current_mode_val).lower()
+                                                    if DESIRED_MARGIN_MODE.lower() not in cm:
+                                                        print(f"⚠️ Verificatie mismatch: gewenste margin mode={DESIRED_MARGIN_MODE}, exchange rapporteert={current_mode_val}")
+                                                        raise Exception("Margin mode verificatie faalde")
+                                                    else:
+                                                        print(f"✅ Margin mode verificatie OK: {current_mode_val}")
+                                                except Exception:
+                                                    raise
+                                        except Exception:
+                                            pass
                                         break
                                     except Exception as e:
                                         print(f"⚠️ Poging {attempt+1}: kon margin mode niet instellen op {DESIRED_MARGIN_MODE} voor {symbol}: {repr(e)}")
@@ -388,7 +414,6 @@ def execute_live_trades_scan():
                                         if attempt == 0:
                                             time.sleep(0.5)
                                         else:
-                                            # geef de precieze error verderop
                                             raise
 
                         except Exception as e:
@@ -415,19 +440,39 @@ def execute_live_trades_scan():
                             else:
                                 contract_amount = 1.0
 
+                            # Zorg dat we expliciet de margin mode meesturen in de order params
                             params = {
                                 'stopLoss': {'triggerPrice': stop_loss_val},
                                 'takeProfit': {'triggerPrice': take_profit_val},
+                                'marginMode': DESIRED_MARGIN_MODE,
                             }
 
                             if last_pred == 1:
                                 print(f"🔥 Puntsysteem geslaagd ({score}/{max_score})! Sterk LONG signaal voor {symbol} ({contract_amount} contracten)!")
-                                order = exchange.create_order(symbol, 'market', 'buy', contract_amount, None, params)
-                                print(f"✅ Long order geplaatst: {order.get('id')}")
+                                try:
+                                    order = exchange.create_order(symbol, 'market', 'buy', contract_amount, None, params)
+                                    print(f"✅ Long order geplaatst: {order.get('id')}")
+                                except Exception as e:
+                                    print(f"⛔ Fout bij orderplaatsing voor {symbol}: {repr(e)}")
+                                    for attr in ('last_http_response', 'last_response', 'last_json_response', 'last_http_response_headers'):
+                                        if hasattr(exchange, attr):
+                                            try:
+                                                print(attr, "=", getattr(exchange, attr))
+                                            except Exception:
+                                                pass
                             else:
                                 print(f"🔥 Puntsysteem geslaagd ({score}/{max_score})! Sterk SHORT signaal voor {symbol} ({contract_amount} contracten)!")
-                                order = exchange.create_order(symbol, 'market', 'sell', contract_amount, None, params)
-                                print(f"✅ Short order geplaatst: {order.get('id')}")
+                                try:
+                                    order = exchange.create_order(symbol, 'market', 'sell', contract_amount, None, params)
+                                    print(f"✅ Short order geplaatst: {order.get('id')}")
+                                except Exception as e:
+                                    print(f"⛔ Fout bij orderplaatsing voor {symbol}: {repr(e)}")
+                                    for attr in ('last_http_response', 'last_response', 'last_json_response', 'last_http_response_headers'):
+                                        if hasattr(exchange, attr):
+                                            try:
+                                                print(attr, "=", getattr(exchange, attr))
+                                            except Exception:
+                                                pass
                     else:
                         print(f"ℹ️ Signaal onder drempelwaarde of onvoldoende score ({score}/{max_score}) voor {symbol}.")
 
