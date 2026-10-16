@@ -302,10 +302,21 @@ def execute_live_trades_scan():
                         except Exception:
                             pass
 
-                        # Automatische contract-omrekening met minimaal 1 contract (KuCoin vereiste)
+                       # Automatische contract-omrekening op basis van KuCoin contractSize
                         position_usdt_value = TRADE_AMOUNT_USDT * LEVERAGE
-                        raw_amount = position_usdt_value / current_price
-                        contract_amount = max(1.0, round(raw_amount))
+                        
+                        try:
+                            market_info = exchange.market(symbol)
+                            contract_size = market_info.get('contractSize', 1.0)
+                        except Exception:
+                            contract_size = 1.0
+
+                        notional_per_contract = current_price * contract_size
+                        if notional_per_contract > 0:
+                            raw_amount = position_usdt_value / notional_per_contract
+                            contract_amount = max(1.0, round(raw_amount))
+                        else:
+                            contract_amount = 1.0
 
                         params = {
                             'stopLoss': {'triggerPrice': stop_loss_val},
