@@ -85,7 +85,7 @@ def pull_latest_states_from_github():
         try:
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
             if github_token:
-                req.add_header('Authorization', f'token {github_token}'
+                req.add_header('Authorization', f'token {github_token}')
                 
             with urllib.request.urlopen(req, timeout=10) as response:
                 if response.status == 200:
