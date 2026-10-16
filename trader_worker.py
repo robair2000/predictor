@@ -4,7 +4,6 @@ import os
 import time
 import json
 import threading
-import subprocess
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import ccxt
 from datetime import datetime, timezone
@@ -101,6 +100,14 @@ def pull_latest_states_from_github():
             
     print("🔄 Verse JSON-bestanden succesvol opgehaald van GitHub via directe download.")
 
+def manage_open_positions_and_trailing_stops():
+    """Beheert open posities, past trailing stops toe en sluit bij tegenwind of trailing stop hit (draait elke minuut)."""
+    try:
+        positions = exchange.fetch_positions()
+    except Exception as e:
+        print(f"Fout bij ophalen open posities: {e}")
+        return
+
     for pos in positions:
         contracts = float(pos.get('contracts', 0))
         if contracts == 0:
@@ -172,7 +179,7 @@ def pull_latest_states_from_github():
 
 def execute_live_trades_scan():
     """Voert de filtering uit op basis van harde en zachte filters (puntsysteem) en zoekt naar nieuwe trades (draait elke 15 minuten)."""
-    # Stap 0: Haal direct de nieuwste model states op van GitHub voor de scan
+    # Stap 0: Haal direct de nieuwste model states op van GitHub via URL download
     pull_latest_states_from_github()
     
     print("--- [Futures Live Trader Worker] Start geoptimaliseerde scoring filtering ---")
