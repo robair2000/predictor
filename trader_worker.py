@@ -37,7 +37,7 @@ TIMEFRAMES = ['15m', '1h']
 TRADE_CHECK_INTERVAL_SECONDS = 900    # Elke 15 minuten nieuwe trades zoeken
 POSITION_CHECK_INTERVAL_SECONDS = 60  # Elke 1 minuut open posities / trailing stops controleren
 
-TRADE_AMOUNT_USDT = 6.0             # Totale gewenste positiewaarde in USDT (~$6 totaal met 10x hefboom)
+TRADE_AMOUNT_USDT = 6.0               # Totale gewenste positiewaarde in USDT (~$6 totaal met 10x hefboom)
 LEVERAGE = 10                         # Vaste hefboom van 10x
 
 # Basis & Risico Drempels
@@ -331,12 +331,13 @@ def execute_live_trades_scan():
                     # --- UITVOERING OP BASIS VAN PUNTEN & DREMPEL ---
                     if prob >= MIN_DIRECTION_PROBABILITY and predicted_return_pct >= MIN_PREDICTED_RETURN_PCT and score >= MINIMUM_REQUIRED_SCORE:
                         try:
-                            exchange.set_leverage(LEVERAGE, symbol)
-                            print(f"⚙️ Hefboom succesvol ingesteld op {LEVERAGE}x voor {symbol}")
+                            # Geef expliciet de marginMode mee om de Isolated Margin melding te verhelpen
+                            exchange.set_leverage(LEVERAGE, symbol, {'marginMode': 'isolated'})
+                            print(f"⚙️ Hefboom succesvol ingesteld op {LEVERAGE}x (Isolated) voor {symbol}")
                         except Exception as e:
                             print(f"⚠️ Let op: Kon hefboom niet instellen voor {symbol}: {e}")
 
-                        # TRADE_AMOUNT_USDT is nu direct het totale gewenste positiebedrag (~$6)
+                        # TRADE_AMOUNT_USDT is direct het totale positiebedrag (6.0 USDT)
                         position_usdt_value = TRADE_AMOUNT_USDT
                         
                         try:
