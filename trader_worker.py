@@ -37,7 +37,7 @@ TIMEFRAMES = ['15m', '1h']
 TRADE_CHECK_INTERVAL_SECONDS = 900    # Elke 15 minuten nieuwe trades zoeken
 POSITION_CHECK_INTERVAL_SECONDS = 60  # Elke 1 minuut open posities / trailing stops controleren
 
-TRADE_AMOUNT_USDT = 6.0               # Jouw inzet per trade in USDT (marge)
+TRADE_AMOUNT_USDT = 0.60              # Totale gewenste positiewaarde in USDT (~$6 totaal met 10x hefboom)
 LEVERAGE = 10                         # Vaste hefboom van 10x
 
 # Basis & Risico Drempels
@@ -74,7 +74,6 @@ def pull_latest_states_from_github():
     assets = ['btc', 'eth', 'link']
     timeframes = ['15m', '1h']
     
-    # Voeg ook de btc 15m toe voor correlatie
     files_to_download = [f'model_state_{asset}_{tf}.json' for asset in assets for tf in timeframes]
     
     headers = {}
@@ -82,7 +81,6 @@ def pull_latest_states_from_github():
         headers['Authorization'] = f'token {github_token}'
         
     for filename in files_to_download:
-        # Gebruik de raw GitHub URL
         url = f'https://raw.githubusercontent.com/robair2000/predictor/main/{filename}'
         try:
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
@@ -95,7 +93,6 @@ def pull_latest_states_from_github():
                     with open(filename, 'wb') as f:
                         f.write(content)
         except Exception as e:
-            # Stil of subtiel loggen zodat de bot niet crasht als een bestand even mist
             pass
             
     print("🔄 Verse JSON-bestanden succesvol opgehaald van GitHub via directe download.")
@@ -179,7 +176,6 @@ def manage_open_positions_and_trailing_stops():
 
 def execute_live_trades_scan():
     """Voert de filtering uit op basis van harde en zachte filters (puntsysteem) en zoekt naar nieuwe trades (draait elke 15 minuten)."""
-    # Stap 0: Haal direct de nieuwste model states op van GitHub via URL download
     pull_latest_states_from_github()
     
     print("--- [Futures Live Trader Worker] Start geoptimaliseerde scoring filtering ---")
@@ -336,11 +332,12 @@ def execute_live_trades_scan():
                     if prob >= MIN_DIRECTION_PROBABILITY and predicted_return_pct >= MIN_PREDICTED_RETURN_PCT and score >= MINIMUM_REQUIRED_SCORE:
                         try:
                             exchange.set_leverage(LEVERAGE, symbol)
-                        except Exception:
-                            pass
+                            print(f"⚙️ Hefboom succesvol ingesteld op {LEVERAGE}x voor {symbol}")
+                        except Exception as e:
+                            print(f"⚠️ Let op: Kon hefboom niet instellen voor {symbol}: {e}")
 
-                       # Automatische contract-omrekening op basis van KuCoin contractSize
-                        position_usdt_value = TRADE_AMOUNT_USDT * LEVERAGE
+                        # TRADE_AMOUNT_USDT is nu direct het totale gewenste positiebedrag (~$6)
+                        position_usdt_value = TRADE_AMOUNT_USDT
                         
                         try:
                             market_info = exchange.market(symbol)
@@ -375,7 +372,7 @@ def execute_live_trades_scan():
                 print(f"Fout bij verwerken filters voor {asset}: {e}")
 
 if __name__ == '__main__':
-    print("Futures Live Trader Worker is gestart met automatische contract-filtering (24/7)...")
+    print("Futures Live Trader Worker is gestart met automatische contract-filtering (~$6 positie / 10x hefboom) (24/7)...")
     last_trade_check_time = 0
 
     while True:
