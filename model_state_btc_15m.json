@@ -1,26 +1,26 @@
 {
-    "learning_rate": 0.15,
+    "learning_rate": 0.145,
     "max_depth": 5,
     "n_estimators": 100,
     "previous_learning_rate": 0.05,
     "previous_max_depth": 5,
-    "baseline_error": 33.02863045599952,
-    "last_prediction": 82342.96216110328,
+    "baseline_error": 191.66216110327514,
+    "last_prediction": 82237.80115269445,
     "search_direction": 1,
-    "lookback_window": 300,
+    "lookback_window": 290,
     "model_weights": {
-        "xgb": 0.023612463873527494,
-        "cat": 0.0035066231331801925,
-        "rf": 0.9728809129932924
+        "xgb": 0.45415251742945023,
+        "cat": 0.3354951727932889,
+        "rf": 0.21035230977726088
     },
     "model_errors": {
-        "xgb": 7.935937500005821,
-        "cat": 53.43803157785442,
-        "rf": 0.19261044751328882
+        "xgb": 63.48906249999709,
+        "cat": 85.94376284084865,
+        "rf": 137.07345356263977
     },
-    "direction_probability": 27.324203491210938,
-    "stop_loss": 82162.20714285714,
-    "take_profit": 82642.72142857141,
+    "direction_probability": 87.80470275878906,
+    "stop_loss": 81971.79285714286,
+    "take_profit": 82450.47857142857,
     "active_features": [
         "return_1",
         "dist_sma20",
@@ -33,16 +33,16 @@
         "OBV_slope",
         "VWAP_dist",
         "Supertrend_dist",
+        "CMF",
+        "ATR_percentile",
+        "smc_zone_dist",
         "MACD_hist",
         "ADX",
-        "CMF",
         "regime_score",
-        "smc_zone_dist",
-        "lorentzian_dist",
-        "ATR_percentile"
+        "lorentzian_dist"
     ],
-    "last_trained_timestamp": 1792112450.7429647,
-    "current_regime": "sideways",
+    "last_trained_timestamp": 1792118118.4590693,
+    "current_regime": "trending",
     "regime_features": {
         "trending": [
             "return_1",
@@ -85,6 +85,6 @@
             "ATR_percentile"
         ]
     },
-    "last_prediction_price": 82342.96216110328,
-    "updated_at": 1792112450
+    "last_prediction_price": 82237.80115269445,
+    "updated_at": 1792118118
 }
