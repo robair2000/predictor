@@ -165,9 +165,44 @@ def manage_open_positions_and_trailing_stops():
 
             if current_price <= trade_info["sl"]:
                 print(f"🛑 Trailing Stop geraakt voor Long {symbol} op ${current_price}. Positie sluiten...")
-                exchange.create_order(symbol, 'market', 'sell', contracts, None, {'reduceOnly': True})
-                del active_trade_peaks[symbol]
-                symbol_cooldowns[symbol] = time.time()
+                # sluit positie — stuur expliciet marginMode en probeer close_position wanneer beschikbaar
+                closed = False
+                params_close = {'reduceOnly': True, 'marginMode': DESIRED_MARGIN_MODE}
+                try:
+                    has = getattr(exchange, 'has', {}) or {}
+                    if has.get('closePosition') or has.get('close_position'):
+                        try:
+                            if hasattr(exchange, 'close_position'):
+                                exchange.close_position(symbol, {'marginMode': DESIRED_MARGIN_MODE})
+                            else:
+                                exchange.closePosition(symbol, {'marginMode': DESIRED_MARGIN_MODE})
+                            print(f"✅ Closed long position for {symbol} via close_position")
+                            closed = True
+                        except Exception:
+                            # fallback to reduce-only market order
+                            order = exchange.create_order(symbol, 'market', 'sell', contracts, None, params_close)
+                            oid = order.get('id') if isinstance(order, dict) else repr(order)
+                            print(f"✅ Long reduced (fallback) closed: {oid}")
+                            closed = True
+                    else:
+                        order = exchange.create_order(symbol, 'market', 'sell', contracts, None, params_close)
+                        oid = order.get('id') if isinstance(order, dict) else repr(order)
+                        print(f"✅ Long order placed (reduceOnly): {oid}")
+                        closed = True
+                except Exception as e:
+                    print(f"⛔ Fout bij sluiten Long {symbol}: {repr(e)}")
+                    for attr in ('last_http_response', 'last_response', 'last_json_response', 'last_http_response_headers'):
+                        if hasattr(exchange, attr):
+                            try:
+                                print(attr, "=", getattr(exchange, attr))
+                            except Exception:
+                                pass
+                    closed = False
+
+                if closed:
+                    if symbol in active_trade_peaks:
+                        del active_trade_peaks[symbol]
+                    symbol_cooldowns[symbol] = time.time()
 
         elif side == 'short':
             if current_price < trade_info["peak_price"]:
@@ -179,9 +214,44 @@ def manage_open_positions_and_trailing_stops():
 
             if current_price >= trade_info["sl"]:
                 print(f"🛑 Trailing Stop geraakt voor Short {symbol} op ${current_price}. Positie sluiten...")
-                exchange.create_order(symbol, 'market', 'buy', contracts, None, {'reduceOnly': True})
-                del active_trade_peaks[symbol]
-                symbol_cooldowns[symbol] = time.time()
+                # sluit positie — stuur expliciet marginMode en probeer close_position wanneer beschikbaar
+                closed = False
+                params_close = {'reduceOnly': True, 'marginMode': DESIRED_MARGIN_MODE}
+                try:
+                    has = getattr(exchange, 'has', {}) or {}
+                    if has.get('closePosition') or has.get('close_position'):
+                        try:
+                            if hasattr(exchange, 'close_position'):
+                                exchange.close_position(symbol, {'marginMode': DESIRED_MARGIN_MODE})
+                            else:
+                                exchange.closePosition(symbol, {'marginMode': DESIRED_MARGIN_MODE})
+                            print(f"✅ Closed short position for {symbol} via close_position")
+                            closed = True
+                        except Exception:
+                            # fallback to reduce-only market order
+                            order = exchange.create_order(symbol, 'market', 'buy', contracts, None, params_close)
+                            oid = order.get('id') if isinstance(order, dict) else repr(order)
+                            print(f"✅ Short reduced (fallback) closed: {oid}")
+                            closed = True
+                    else:
+                        order = exchange.create_order(symbol, 'market', 'buy', contracts, None, params_close)
+                        oid = order.get('id') if isinstance(order, dict) else repr(order)
+                        print(f"✅ Short order placed (reduceOnly): {oid}")
+                        closed = True
+                except Exception as e:
+                    print(f"⛔ Fout bij sluiten Short {symbol}: {repr(e)}")
+                    for attr in ('last_http_response', 'last_response', 'last_json_response', 'last_http_response_headers'):
+                        if hasattr(exchange, attr):
+                            try:
+                                print(attr, "=", getattr(exchange, attr))
+                            except Exception:
+                                pass
+                    closed = False
+
+                if closed:
+                    if symbol in active_trade_peaks:
+                        del active_trade_peaks[symbol]
+                    symbol_cooldowns[symbol] = time.time()
 
 def execute_live_trades_scan():
     """Voert de filtering uit op basis van harde en zachte filters (puntsysteem) en zoekt naar nieuwe trades (draait elke 15 minuten)."""
