@@ -1,26 +1,26 @@
 {
-    "learning_rate": 0.11499999999999996,
+    "learning_rate": 0.11999999999999997,
     "max_depth": 5,
     "n_estimators": 100,
     "previous_learning_rate": 0.05,
     "previous_max_depth": 5,
-    "baseline_error": 198.17974514237721,
-    "last_prediction": 81316.13575356052,
+    "baseline_error": 197.73575356052606,
+    "last_prediction": 81218.95527093954,
     "search_direction": 1,
-    "lookback_window": 200,
+    "lookback_window": 190,
     "model_weights": {
-        "xgb": 0.39917094839892053,
-        "cat": 0.20860021780652482,
-        "rf": 0.3922288337945547
+        "xgb": 0.5412471901003117,
+        "cat": 0.2610192433038554,
+        "rf": 0.19773356659583285
     },
     "model_errors": {
-        "xgb": 80.86406249999709,
-        "cat": 154.73897803576256,
-        "rf": 82.29528718556685
+        "xgb": 61.92812500000582,
+        "cat": 128.41361128388962,
+        "rf": 169.5130686454504
     },
-    "direction_probability": 80.80679321289062,
-    "stop_loss": 80737.02857142857,
-    "take_profit": 82023.08571428571,
+    "direction_probability": 55.86374282836914,
+    "stop_loss": 80635.43214285714,
+    "take_profit": 81923.34642857143,
     "active_features": [
         "return_1",
         "dist_sma20",
@@ -38,9 +38,10 @@
         "MACD_hist",
         "ADX",
         "lorentzian_dist",
-        "CMF"
+        "CMF",
+        "regime_score"
     ],
-    "last_trained_timestamp": 1792176623.9277675,
+    "last_trained_timestamp": 1792177517.9687805,
     "current_regime": "trending",
     "regime_features": {
         "trending": [
@@ -60,7 +61,8 @@
             "MACD_hist",
             "ADX",
             "lorentzian_dist",
-            "CMF"
+            "CMF",
+            "regime_score"
         ],
         "sideways": [
             "return_1",
@@ -83,6 +85,6 @@
             "ATR_percentile"
         ]
     },
-    "last_prediction_price": 81316.13575356052,
-    "updated_at": 1792176623
+    "last_prediction_price": 81218.95527093954,
+    "updated_at": 1792177517
 }

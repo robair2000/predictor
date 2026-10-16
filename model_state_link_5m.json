@@ -1,13 +1,13 @@
 {
-    "learning_rate": 0.02,
+    "learning_rate": 0.015,
     "max_depth": 4,
     "n_estimators": 50,
-    "baseline_error": 0.08921598342091919,
-    "last_prediction": 12.308296585599086,
-    "last_prediction_price": 12.308296585599086,
+    "baseline_error": 0.09319658559908639,
+    "last_prediction": 12.242029075764517,
+    "last_prediction_price": 12.242029075764517,
     "search_direction": 1,
-    "lookback_window": 60,
-    "current_regime": "sideways",
+    "lookback_window": 70,
+    "current_regime": "trending",
     "regime_features": {
         "trending": [
             "return_1",
@@ -26,7 +26,8 @@
             "smc_zone_dist",
             "MACD_hist",
             "ATR_percentile",
-            "CMF"
+            "CMF",
+            "ADX"
         ],
         "sideways": [
             "return_1",
@@ -61,27 +62,27 @@
         "OBV_slope",
         "VWAP_dist",
         "Supertrend_dist",
-        "CMF",
-        "ADX",
-        "smc_zone_dist",
-        "regime_score",
-        "ATR_percentile",
         "lorentzian_dist",
-        "MACD_hist"
+        "regime_score",
+        "smc_zone_dist",
+        "MACD_hist",
+        "ATR_percentile",
+        "CMF",
+        "ADX"
     ],
-    "last_trained_timestamp": 1792177247.2256818,
+    "last_trained_timestamp": 1792177517.9687805,
     "model_weights": {
-        "xgb": 0.3601694097091532,
-        "cat": 0.22197291426979332,
-        "rf": 0.41785767602105356
+        "xgb": 0.08531958214743353,
+        "cat": 0.06153892135018503,
+        "rf": 0.8531414965023815
     },
     "model_errors": {
-        "xgb": 0.06792783508300815,
-        "cat": 0.11021853601875264,
-        "rf": 0.05854990608465549
+        "xgb": 0.10520868530273475,
+        "cat": 0.14586478133142933,
+        "rf": 0.01052152946128082
     },
-    "direction_probability": 17.465909957885742,
-    "stop_loss": 12.172082142857143,
-    "take_profit": 12.339596428571427,
-    "updated_at": 1792177247
+    "direction_probability": 20.88294792175293,
+    "stop_loss": 12.152303571428572,
+    "take_profit": 12.319760714285714,
+    "updated_at": 1792177517
 }
