@@ -1,26 +1,26 @@
 {
-    "learning_rate": 0.12999999999999998,
+    "learning_rate": 0.12499999999999997,
     "max_depth": 5,
     "n_estimators": 100,
     "previous_learning_rate": 0.05,
     "previous_max_depth": 5,
-    "baseline_error": 12.05716707049578,
-    "last_prediction": 81788.2443783003,
+    "baseline_error": 258.3443783003022,
+    "last_prediction": 81748.24812166816,
     "search_direction": 1,
-    "lookback_window": 190,
+    "lookback_window": 200,
     "model_weights": {
-        "xgb": 0.597526330512421,
-        "cat": 0.14010151853387415,
-        "rf": 0.26237215095370486
+        "xgb": 0.31971757671988604,
+        "cat": 0.3478481125423582,
+        "rf": 0.3324343107377558
     },
     "model_errors": {
-        "xgb": 55.921875,
-        "cat": 238.504144126171,
-        "rf": 127.35647684411379
+        "xgb": 227.64687500000582,
+        "cat": 209.23703363120148,
+        "rf": 218.938613951148
     },
-    "direction_probability": 36.14655303955078,
-    "stop_loss": 81292.24642857144,
-    "take_profit": 82347.58928571428,
+    "direction_probability": 14.677826881408691,
+    "stop_loss": 81140.47857142857,
+    "take_profit": 82178.9357142857,
     "active_features": [
         "return_1",
         "dist_sma20",
@@ -38,9 +38,10 @@
         "MACD_hist",
         "ADX",
         "regime_score",
-        "CMF"
+        "CMF",
+        "lorentzian_dist"
     ],
-    "last_trained_timestamp": 1792164917.91245,
+    "last_trained_timestamp": 1792165825.779077,
     "current_regime": "trending",
     "regime_features": {
         "trending": [
@@ -60,7 +61,8 @@
             "MACD_hist",
             "ADX",
             "regime_score",
-            "CMF"
+            "CMF",
+            "lorentzian_dist"
         ],
         "sideways": [
             "return_1",
@@ -83,6 +85,6 @@
             "ATR_percentile"
         ]
     },
-    "last_prediction_price": 81788.2443783003,
-    "updated_at": 1792164917
+    "last_prediction_price": 81748.24812166816,
+    "updated_at": 1792165825
 }
