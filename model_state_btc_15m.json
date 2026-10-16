@@ -1,26 +1,26 @@
 {
-    "learning_rate": 0.13999999999999999,
+    "learning_rate": 0.145,
     "max_depth": 5,
     "n_estimators": 100,
     "previous_learning_rate": 0.05,
     "previous_max_depth": 5,
-    "baseline_error": 11.315989682043437,
-    "last_prediction": 82152.2745215355,
-    "search_direction": -1,
-    "lookback_window": 240,
+    "baseline_error": 47.774521535495296,
+    "last_prediction": 82127.01388446451,
+    "search_direction": 1,
+    "lookback_window": 230,
     "model_weights": {
-        "xgb": 0.7115478595383655,
-        "cat": 0.07348009733598941,
-        "rf": 0.21497204312564505
+        "xgb": 0.7338368245276865,
+        "cat": 0.07228597443109391,
+        "rf": 0.1938772010412195
     },
     "model_errors": {
-        "xgb": 12.54374999999709,
-        "cat": 121.4679728668707,
-        "rf": 41.519252170066466
+        "xgb": 10.2265625,
+        "cat": 103.8185929775791,
+        "rf": 38.7081519432395
     },
-    "direction_probability": 41.66404724121094,
-    "stop_loss": 82425.30714285714,
-    "take_profit": 81721.02142857142,
+    "direction_probability": 37.65029525756836,
+    "stop_loss": 81846.3607142857,
+    "take_profit": 82534.73214285714,
     "active_features": [
         "return_1",
         "dist_sma20",
@@ -38,9 +38,10 @@
         "smc_zone_dist",
         "MACD_hist",
         "ADX",
-        "lorentzian_dist"
+        "lorentzian_dist",
+        "regime_score"
     ],
-    "last_trained_timestamp": 1792129824.312859,
+    "last_trained_timestamp": 1792130718.2822988,
     "current_regime": "trending",
     "regime_features": {
         "trending": [
@@ -60,7 +61,8 @@
             "smc_zone_dist",
             "MACD_hist",
             "ADX",
-            "lorentzian_dist"
+            "lorentzian_dist",
+            "regime_score"
         ],
         "sideways": [
             "return_1",
@@ -83,6 +85,6 @@
             "ATR_percentile"
         ]
     },
-    "last_prediction_price": 82152.2745215355,
-    "updated_at": 1792129824
+    "last_prediction_price": 82127.01388446451,
+    "updated_at": 1792130718
 }
