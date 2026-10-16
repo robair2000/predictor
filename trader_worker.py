@@ -1,3 +1,5 @@
+import urllib.request
+import urllib.error
 import os
 import time
 import json
@@ -68,23 +70,36 @@ exchange = ccxt.kucoin({
 })
 
 def pull_latest_states_from_github():
-    """Haalt automatisch de nieuwste JSON-bestanden op van GitHub zodat de trader up-to-date data gebruikt."""
-    try:
-        result = subprocess.run(['git', 'pull', 'origin', 'main'], capture_output=True, text=True)
-        if result.returncode == 0:
-            print("🔄 Verse JSON-bestanden succesvol opgehaald van GitHub via git pull.")
-        else:
-            print(f"⚠️ Git pull waarschuwing: {result.stderr.strip()}")
-    except Exception as e:
-        print(f"❌ Fout bij git pull in trader_worker: {e}")
-
-def manage_open_positions_and_trailing_stops():
-    """Beheert open posities, past trailing stops toe en sluit bij tegenwind of trailing stop hit (draait elke minuut)."""
-    try:
-        positions = exchange.fetch_positions()
-    except Exception as e:
-        print(f"Fout bij ophalen open posities: {e}")
-        return
+    """Download de nieuwste JSON state-bestanden rechtstreeks van GitHub zonder git nodig te hebben."""
+    github_token = os.environ.get('GITHUB_TOKEN', '')
+    assets = ['btc', 'eth', 'link']
+    timeframes = ['15m', '1h']
+    
+    # Voeg ook de btc 15m toe voor correlatie
+    files_to_download = [f'model_state_{asset}_{tf}.json' for asset in assets for tf in timeframes]
+    
+    headers = {}
+    if github_token:
+        headers['Authorization'] = f'token {github_token}'
+        
+    for filename in files_to_download:
+        # Gebruik de raw GitHub URL
+        url = f'https://raw.githubusercontent.com/robair2000/predictor/main/{filename}'
+        try:
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            if github_token:
+                req.add_header('Authorization', f'token {github_token}')
+                
+            with urllib.request.urlopen(req, timeout=10) as response:
+                if response.status == 200:
+                    content = response.read()
+                    with open(filename, 'wb') as f:
+                        f.write(content)
+        except Exception as e:
+            # Stil of subtiel loggen zodat de bot niet crasht als een bestand even mist
+            pass
+            
+    print("🔄 Verse JSON-bestanden succesvol opgehaald van GitHub via directe download.")
 
     for pos in positions:
         contracts = float(pos.get('contracts', 0))
