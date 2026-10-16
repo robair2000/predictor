@@ -68,6 +68,13 @@ exchange = ccxt.kucoin({
     }
 })
 
+# Laat zien welke unified features CCXT exposes (handig voor debugging)
+try:
+    print("exchange.has =", exchange.has)
+except Exception:
+    pass
+
+
 def pull_latest_states_from_github():
     """Download de nieuwste JSON state-bestanden rechtstreeks van GitHub zonder git nodig te hebben."""
     github_token = os.environ.get('GITHUB_TOKEN', '')
@@ -341,33 +348,51 @@ def execute_live_trades_scan():
 
                             # 1) Probeer margin mode in te stellen als de exchange dit ondersteunt
                             if has.get('set_margin_mode') or has.get('setMarginMode'):
-                                try:
-                                    if hasattr(exchange, 'set_margin_mode'):
-                                        exchange.set_margin_mode(DESIRED_MARGIN_MODE, symbol)
-                                    else:
-                                        exchange.setMarginMode(DESIRED_MARGIN_MODE, {'symbol': symbol})
-                                    print(f"⚙️ Margin mode ingesteld op {DESIRED_MARGIN_MODE} voor {symbol}")
-                                except Exception as e:
-                                    print(f"⚠️ Kon margin mode niet instellen op {DESIRED_MARGIN_MODE} voor {symbol}: {e}")
-                                    raise
+                                # probeer tot 2 keer met kleine delay
+                                for attempt in range(2):
+                                    try:
+                                        if hasattr(exchange, 'set_margin_mode'):
+                                            exchange.set_margin_mode(DESIRED_MARGIN_MODE, symbol)
+                                        else:
+                                            exchange.setMarginMode(DESIRED_MARGIN_MODE, {'symbol': symbol})
+                                        print(f"⚙️ Margin mode ingesteld op {DESIRED_MARGIN_MODE} voor {symbol}")
+                                        # geef de exchange even de tijd om de instelling toe te passen
+                                        time.sleep(0.5)
+                                        break
+                                    except Exception as e:
+                                        print(f"⚠️ Poging {attempt+1}: kon margin mode niet instellen op {DESIRED_MARGIN_MODE} voor {symbol}: {repr(e)}")
+                                        if attempt == 0:
+                                            time.sleep(0.5)
+                                        else:
+                                            raise
                             else:
                                 print("ℹ️ Exchange geeft geen set_margin_mode aan; verifieer margin mode in KuCoin UI indien nodig.")
 
-                            # 2) Nu leverage instellen (probeer unified call, fallback met param)
-                            try:
-                                exchange.set_leverage(LEVERAGE, symbol)
-                            except Exception as e_leverage:
+                            # 2) Nu leverage instellen (probeer unified call, fallback met param). retry once on transient fail.
+                            for attempt in range(2):
                                 try:
-                                    exchange.set_leverage(LEVERAGE, symbol, {'marginMode': DESIRED_MARGIN_MODE})
-                                except Exception as e2:
-                                    print(f"⚠️ Kon hefboom niet instellen voor {symbol}: {e_leverage} | fallback: {e2}")
-                                    raise
-
-                            print(f"⚙️ Hefboom succesvol ingesteld op {LEVERAGE}x ({DESIRED_MARGIN_MODE}) voor {symbol}")
-                            margin_and_leverage_ok = True
+                                    exchange.set_leverage(LEVERAGE, symbol)
+                                    print(f"⚙️ Hefboom succesvol ingesteld op {LEVERAGE}x ({DESIRED_MARGIN_MODE}) voor {symbol}")
+                                    margin_and_leverage_ok = True
+                                    break
+                                except Exception as e_leverage:
+                                    print(f"⚠️ Poging {attempt+1}: kon hefboom niet instellen met unified call voor {symbol}: {repr(e_leverage)}")
+                                    # fallback: try passing marginMode param
+                                    try:
+                                        exchange.set_leverage(LEVERAGE, symbol, {'marginMode': DESIRED_MARGIN_MODE})
+                                        print(f"⚙️ Hefboom succesvol ingesteld op {LEVERAGE}x ({DESIRED_MARGIN_MODE}) voor {symbol} via fallback param")
+                                        margin_and_leverage_ok = True
+                                        break
+                                    except Exception as e2:
+                                        print(f"⚠️ fallback mislukt voor {symbol}: {repr(e2)}")
+                                        if attempt == 0:
+                                            time.sleep(0.5)
+                                        else:
+                                            # geef de precieze error verderop
+                                            raise
 
                         except Exception as e:
-                            print(f"⛔ Margin/leverage setup mislukt voor {symbol}: {e}")
+                            print(f"⛔ Margin/leverage setup mislukt voor {symbol}: {repr(e)}")
                             margin_and_leverage_ok = False
 
                         # Alleen order plaatsen als margin & leverage OK zijn
