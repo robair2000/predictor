@@ -302,8 +302,10 @@ def execute_live_trades_scan():
                         except Exception:
                             pass
 
+                        # Automatische contract-omrekening met minimaal 1 contract (KuCoin vereiste)
                         position_usdt_value = TRADE_AMOUNT_USDT * LEVERAGE
-                        amount = position_usdt_value / current_price
+                        raw_amount = position_usdt_value / current_price
+                        contract_amount = max(1.0, round(raw_amount))
 
                         params = {
                             'stopLoss': {'triggerPrice': stop_loss_val},
@@ -311,12 +313,12 @@ def execute_live_trades_scan():
                         }
 
                         if last_pred == 1:
-                            print(f"🔥 Puntsysteem geslaagd ({score}/{max_score})! Sterk LONG signaal voor {symbol}!")
-                            order = exchange.create_order(symbol, 'market', 'buy', amount, None, params)
+                            print(f"🔥 Puntsysteem geslaagd ({score}/{max_score})! Sterk LONG signaal voor {symbol} ({contract_amount} contracten)!")
+                            order = exchange.create_order(symbol, 'market', 'buy', contract_amount, None, params)
                             print(f"✅ Long order geplaatst: {order.get('id')}")
                         else:
-                            print(f"🔥 Puntsysteem geslaagd ({score}/{max_score})! Sterk SHORT signaal voor {symbol}!")
-                            order = exchange.create_order(symbol, 'market', 'sell', amount, None, params)
+                            print(f"🔥 Puntsysteem geslaagd ({score}/{max_score})! Sterk SHORT signaal voor {symbol} ({contract_amount} contracten)!")
+                            order = exchange.create_order(symbol, 'market', 'sell', contract_amount, None, params)
                             print(f"✅ Short order geplaatst: {order.get('id')}")
                     else:
                         print(f"ℹ️ Signaal onder drempelwaarde of onvoldoende score ({score}/{max_score}) voor {symbol}.")
@@ -325,7 +327,7 @@ def execute_live_trades_scan():
                 print(f"Fout bij verwerken filters voor {asset}: {e}")
 
 if __name__ == '__main__':
-    print("Futures Live Trader Worker is gestart met 1-minuut positie-bewaking (24/7)...")
+    print("Futures Live Trader Worker is gestart met automatische contract-filtering (24/7)...")
     last_trade_check_time = 0
 
     while True:
