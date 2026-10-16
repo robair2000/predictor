@@ -1,26 +1,26 @@
 {
-    "learning_rate": 0.02,
+    "learning_rate": 0.025,
     "max_depth": 5,
     "n_estimators": 100,
     "previous_learning_rate": 0.045000000000000005,
     "previous_max_depth": 5,
-    "baseline_error": 0.10823623041526353,
-    "last_prediction": 12.386878531502184,
+    "baseline_error": 0.06897853150218403,
+    "last_prediction": 12.39844309291177,
     "search_direction": 1,
-    "lookback_window": 260,
+    "lookback_window": 250,
     "model_weights": {
-        "xgb": 0.3074106889326204,
-        "cat": 0.23071921346266722,
-        "rf": 0.4618700976047124
+        "xgb": 0.3521195809707833,
+        "cat": 0.28828107986856666,
+        "rf": 0.35959933916065007
     },
     "model_errors": {
-        "xgb": 0.10624064788818366,
-        "cat": 0.1415552308657375,
-        "rf": 0.07071146061356792
+        "xgb": 0.07624596557617203,
+        "cat": 0.09313028139071733,
+        "rf": 0.07466002979110797
     },
-    "direction_probability": 80.36034393310547,
-    "stop_loss": 12.152089285714286,
-    "take_profit": 12.516917857142857,
+    "direction_probability": 65.40338134765625,
+    "stop_loss": 12.186596428571429,
+    "take_profit": 12.536739285714285,
     "active_features": [
         "return_1",
         "dist_sma20",
@@ -33,7 +33,6 @@
         "OBV_slope",
         "VWAP_dist",
         "Supertrend_dist",
-        "ADX",
         "lorentzian_dist",
         "regime_score",
         "CMF",
@@ -41,7 +40,7 @@
         "smc_zone_dist",
         "MACD_hist"
     ],
-    "last_trained_timestamp": 1792181116.8951344,
+    "last_trained_timestamp": 1792182023.1795318,
     "current_regime": "sideways",
     "regime_features": {
         "trending": [
@@ -76,7 +75,6 @@
             "OBV_slope",
             "VWAP_dist",
             "Supertrend_dist",
-            "ADX",
             "lorentzian_dist",
             "regime_score",
             "CMF",
@@ -85,6 +83,6 @@
             "MACD_hist"
         ]
     },
-    "last_prediction_price": 12.386878531502184,
-    "updated_at": 1792181116
+    "last_prediction_price": 12.39844309291177,
+    "updated_at": 1792182023
 }
