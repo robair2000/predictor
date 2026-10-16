@@ -1,26 +1,26 @@
 {
-    "learning_rate": 0.060000000000000005,
+    "learning_rate": 0.065,
     "max_depth": 5,
     "n_estimators": 100,
     "previous_learning_rate": 0.045000000000000005,
     "previous_max_depth": 5,
-    "baseline_error": 0.1987779406304746,
-    "last_prediction": 12.60856224898673,
+    "baseline_error": 0.008462248986731424,
+    "last_prediction": 12.679033915969102,
     "search_direction": 1,
-    "lookback_window": 250,
+    "lookback_window": 240,
     "model_weights": {
-        "xgb": 0.7558630629339396,
-        "cat": 0.13084261167197442,
-        "rf": 0.11329432539408596
+        "xgb": 0.6722474441915045,
+        "cat": 0.23465264744931102,
+        "rf": 0.09309990835918457
     },
     "model_errors": {
-        "xgb": 0.01463523864746108,
-        "cat": 0.08454617665976372,
-        "rf": 0.09764163119421276
+        "xgb": 0.03913931121826231,
+        "cat": 0.11212874261529215,
+        "rf": 0.28261368017525434
     },
-    "direction_probability": 59.66053771972656,
-    "stop_loss": 12.5279,
-    "take_profit": 12.7135,
+    "direction_probability": 41.40062713623047,
+    "stop_loss": 12.537496428571428,
+    "take_profit": 12.704439285714285,
     "active_features": [
         "return_1",
         "dist_sma20",
@@ -34,15 +34,15 @@
         "VWAP_dist",
         "Supertrend_dist",
         "MACD_hist",
-        "CMF",
-        "regime_score",
-        "lorentzian_dist",
-        "smc_zone_dist",
         "ATR_percentile",
-        "ADX"
+        "ADX",
+        "lorentzian_dist",
+        "regime_score",
+        "smc_zone_dist",
+        "CMF"
     ],
-    "last_trained_timestamp": 1792138824.5554469,
-    "current_regime": "trending",
+    "last_trained_timestamp": 1792139717.7010372,
+    "current_regime": "sideways",
     "regime_features": {
         "trending": [
             "return_1",
@@ -81,9 +81,10 @@
             "ADX",
             "lorentzian_dist",
             "regime_score",
-            "smc_zone_dist"
+            "smc_zone_dist",
+            "CMF"
         ]
     },
-    "last_prediction_price": 12.60856224898673,
-    "updated_at": 1792138824
+    "last_prediction_price": 12.679033915969102,
+    "updated_at": 1792139717
 }
