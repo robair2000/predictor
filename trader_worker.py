@@ -85,7 +85,7 @@ def pull_latest_states_from_github():
         try:
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
             if github_token:
-                req.add_header('Authorization', f'token {github_token}')
+                req.add_header('Authorization', f'token {github_token}'
                 
             with urllib.request.urlopen(req, timeout=10) as response:
                 if response.status == 200:
@@ -331,9 +331,9 @@ def execute_live_trades_scan():
                     # --- UITVOERING OP BASIS VAN PUNTEN & DREMPEL ---
                     if prob >= MIN_DIRECTION_PROBABILITY and predicted_return_pct >= MIN_PREDICTED_RETURN_PCT and score >= MINIMUM_REQUIRED_SCORE:
                         try:
-                            # Geef expliciet de marginMode mee om de Isolated Margin melding te verhelpen
-                            exchange.set_leverage(LEVERAGE, symbol, {'marginMode': 'isolated'})
-                            print(f"⚙️ Hefboom succesvol ingesteld op {LEVERAGE}x (Isolated) voor {symbol}")
+                            # Geef expliciet de cross margin mode mee
+                            exchange.set_leverage(LEVERAGE, symbol, {'marginMode': 'cross'})
+                            print(f"⚙️ Hefboom succesvol ingesteld op {LEVERAGE}x (Cross) voor {symbol}")
                         except Exception as e:
                             print(f"⚠️ Let op: Kon hefboom niet instellen voor {symbol}: {e}")
 
@@ -373,7 +373,7 @@ def execute_live_trades_scan():
                 print(f"Fout bij verwerken filters voor {asset}: {e}")
 
 if __name__ == '__main__':
-    print("Futures Live Trader Worker is gestart met automatische contract-filtering (~$6 positie / 10x hefboom) (24/7)...")
+    print("Futures Live Trader Worker is gestart met automatische contract-filtering (~$6 positie / 10x hefboom cross) (24/7)...")
     last_trade_check_time = 0
 
     while True:
