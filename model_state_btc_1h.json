@@ -1,26 +1,26 @@
 {
-    "learning_rate": 0.05000000000000001,
+    "learning_rate": 0.04500000000000001,
     "max_depth": 5,
     "n_estimators": 100,
     "previous_learning_rate": 0.05,
     "previous_max_depth": 5,
-    "baseline_error": 135.1787807084038,
-    "last_prediction": 82458.87052789259,
+    "baseline_error": 801.770527892586,
+    "last_prediction": 82028.29987144642,
     "search_direction": 1,
-    "lookback_window": 140,
+    "lookback_window": 150,
     "model_weights": {
-        "xgb": 0.2243605164519898,
-        "cat": 0.14242180457135648,
-        "rf": 0.6332176789766537
+        "xgb": 0.2842442314637696,
+        "cat": 0.22041497081125397,
+        "rf": 0.4953407977249765
     },
     "model_errors": {
-        "xgb": 130.9953125000029,
-        "cat": 206.36008688813308,
-        "rf": 46.41401675439556
+        "xgb": 435.3062499999942,
+        "cat": 561.3651832625183,
+        "rf": 249.79426497635723
     },
-    "direction_probability": 31.522686004638672,
-    "stop_loss": 81793.00714285714,
-    "take_profit": 83333.52142857142,
+    "direction_probability": 11.969741821289062,
+    "stop_loss": 81070.91071428572,
+    "take_profit": 82634.08214285714,
     "active_features": [
         "return_1",
         "dist_sma20",
@@ -38,9 +38,10 @@
         "CMF",
         "lorentzian_dist",
         "MACD_hist",
-        "regime_score"
+        "regime_score",
+        "ATR_percentile"
     ],
-    "last_trained_timestamp": 1792161041.5069883,
+    "last_trained_timestamp": 1792164639.7887957,
     "current_regime": "trending",
     "regime_features": {
         "trending": [
@@ -60,7 +61,8 @@
             "CMF",
             "lorentzian_dist",
             "MACD_hist",
-            "regime_score"
+            "regime_score",
+            "ATR_percentile"
         ],
         "sideways": [
             "return_1",
@@ -77,6 +79,6 @@
             "smc_zone_dist"
         ]
     },
-    "last_prediction_price": 82458.87052789259,
-    "updated_at": 1792161041
+    "last_prediction_price": 82028.29987144642,
+    "updated_at": 1792164639
 }
