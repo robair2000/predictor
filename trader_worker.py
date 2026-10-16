@@ -37,7 +37,7 @@ TIMEFRAMES = ['15m', '1h']
 TRADE_CHECK_INTERVAL_SECONDS = 900    # Elke 15 minuten nieuwe trades zoeken
 POSITION_CHECK_INTERVAL_SECONDS = 60  # Elke 1 minuut open posities / trailing stops controleren
 
-TRADE_AMOUNT_USDT = 0.60              # Totale gewenste positiewaarde in USDT (~$6 totaal met 10x hefboom)
+TRADE_AMOUNT_USDT = 6.0             # Totale gewenste positiewaarde in USDT (~$6 totaal met 10x hefboom)
 LEVERAGE = 10                         # Vaste hefboom van 10x
 
 # Basis & Risico Drempels
