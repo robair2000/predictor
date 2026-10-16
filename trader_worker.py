@@ -331,7 +331,7 @@ def execute_live_trades_scan():
                     # --- UITVOERING OP BASIS VAN PUNTEN & DREMPEL ---
                     if prob >= MIN_DIRECTION_PROBABILITY and predicted_return_pct >= MIN_PREDICTED_RETURN_PCT and score >= MINIMUM_REQUIRED_SCORE:
                         # Config: gewenste margin mode (gebruik 'isolated' of 'cross')
-                        DESIRED_MARGIN_MODE = os.environ.get('MARGIN_MODE', 'isolated')
+                        DESIRED_MARGIN_MODE = os.environ.get('MARGIN_MODE', 'cross')
 
                         # Probeer margin mode & leverage in te stellen, en alleen dan de order plaatsen
                         margin_and_leverage_ok = False
