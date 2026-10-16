@@ -330,42 +330,79 @@ def execute_live_trades_scan():
 
                     # --- UITVOERING OP BASIS VAN PUNTEN & DREMPEL ---
                     if prob >= MIN_DIRECTION_PROBABILITY and predicted_return_pct >= MIN_PREDICTED_RETURN_PCT and score >= MINIMUM_REQUIRED_SCORE:
+                        # Config: gewenste margin mode (gebruik 'isolated' of 'cross')
+                        DESIRED_MARGIN_MODE = os.environ.get('MARGIN_MODE', 'isolated')
+
+                        # Probeer margin mode & leverage in te stellen, en alleen dan de order plaatsen
+                        margin_and_leverage_ok = False
+
                         try:
-                            # Geef expliciet de cross margin mode mee
-                            exchange.set_leverage(LEVERAGE, symbol, {'marginMode': 'cross'})
-                            print(f"⚙️ Hefboom succesvol ingesteld op {LEVERAGE}x (Cross) voor {symbol}")
+                            has = getattr(exchange, 'has', {}) or {}
+
+                            # 1) Probeer margin mode in te stellen als de exchange dit ondersteunt
+                            if has.get('set_margin_mode') or has.get('setMarginMode'):
+                                try:
+                                    if hasattr(exchange, 'set_margin_mode'):
+                                        exchange.set_margin_mode(DESIRED_MARGIN_MODE, symbol)
+                                    else:
+                                        exchange.setMarginMode(DESIRED_MARGIN_MODE, {'symbol': symbol})
+                                    print(f"⚙️ Margin mode ingesteld op {DESIRED_MARGIN_MODE} voor {symbol}")
+                                except Exception as e:
+                                    print(f"⚠️ Kon margin mode niet instellen op {DESIRED_MARGIN_MODE} voor {symbol}: {e}")
+                                    raise
+                            else:
+                                print("ℹ️ Exchange geeft geen set_margin_mode aan; verifieer margin mode in KuCoin UI indien nodig.")
+
+                            # 2) Nu leverage instellen (probeer unified call, fallback met param)
+                            try:
+                                exchange.set_leverage(LEVERAGE, symbol)
+                            except Exception as e_leverage:
+                                try:
+                                    exchange.set_leverage(LEVERAGE, symbol, {'marginMode': DESIRED_MARGIN_MODE})
+                                except Exception as e2:
+                                    print(f"⚠️ Kon hefboom niet instellen voor {symbol}: {e_leverage} | fallback: {e2}")
+                                    raise
+
+                            print(f"⚙️ Hefboom succesvol ingesteld op {LEVERAGE}x ({DESIRED_MARGIN_MODE}) voor {symbol}")
+                            margin_and_leverage_ok = True
+
                         except Exception as e:
-                            print(f"⚠️ Let op: Kon hefboom niet instellen voor {symbol}: {e}")
+                            print(f"⛔ Margin/leverage setup mislukt voor {symbol}: {e}")
+                            margin_and_leverage_ok = False
 
-                        # TRADE_AMOUNT_USDT is direct het totale positiebedrag (6.0 USDT)
-                        position_usdt_value = TRADE_AMOUNT_USDT
-                        
-                        try:
-                            market_info = exchange.market(symbol)
-                            contract_size = market_info.get('contractSize', 1.0)
-                        except Exception:
-                            contract_size = 1.0
-
-                        notional_per_contract = current_price * contract_size
-                        if notional_per_contract > 0:
-                            raw_amount = position_usdt_value / notional_per_contract
-                            contract_amount = max(1.0, round(raw_amount))
+                        # Alleen order plaatsen als margin & leverage OK zijn
+                        if not margin_and_leverage_ok:
+                            print(f"⛔ Trade geannuleerd voor {symbol} omdat margin/leverage niet gegarandeerd zijn.")
                         else:
-                            contract_amount = 1.0
+                            # TRADE_AMOUNT_USDT is direct het totale positiebedrag (6.0 USDT)
+                            position_usdt_value = TRADE_AMOUNT_USDT
+                            
+                            try:
+                                market_info = exchange.market(symbol)
+                                contract_size = market_info.get('contractSize', 1.0)
+                            except Exception:
+                                contract_size = 1.0
 
-                        params = {
-                            'stopLoss': {'triggerPrice': stop_loss_val},
-                            'takeProfit': {'triggerPrice': take_profit_val},
-                        }
+                            notional_per_contract = current_price * contract_size
+                            if notional_per_contract > 0:
+                                raw_amount = position_usdt_value / notional_per_contract
+                                contract_amount = max(1.0, round(raw_amount))
+                            else:
+                                contract_amount = 1.0
 
-                        if last_pred == 1:
-                            print(f"🔥 Puntsysteem geslaagd ({score}/{max_score})! Sterk LONG signaal voor {symbol} ({contract_amount} contracten)!")
-                            order = exchange.create_order(symbol, 'market', 'buy', contract_amount, None, params)
-                            print(f"✅ Long order geplaatst: {order.get('id')}")
-                        else:
-                            print(f"🔥 Puntsysteem geslaagd ({score}/{max_score})! Sterk SHORT signaal voor {symbol} ({contract_amount} contracten)!")
-                            order = exchange.create_order(symbol, 'market', 'sell', contract_amount, None, params)
-                            print(f"✅ Short order geplaatst: {order.get('id')}")
+                            params = {
+                                'stopLoss': {'triggerPrice': stop_loss_val},
+                                'takeProfit': {'triggerPrice': take_profit_val},
+                            }
+
+                            if last_pred == 1:
+                                print(f"🔥 Puntsysteem geslaagd ({score}/{max_score})! Sterk LONG signaal voor {symbol} ({contract_amount} contracten)!")
+                                order = exchange.create_order(symbol, 'market', 'buy', contract_amount, None, params)
+                                print(f"✅ Long order geplaatst: {order.get('id')}")
+                            else:
+                                print(f"🔥 Puntsysteem geslaagd ({score}/{max_score})! Sterk SHORT signaal voor {symbol} ({contract_amount} contracten)!")
+                                order = exchange.create_order(symbol, 'market', 'sell', contract_amount, None, params)
+                                print(f"✅ Short order geplaatst: {order.get('id')}")
                     else:
                         print(f"ℹ️ Signaal onder drempelwaarde of onvoldoende score ({score}/{max_score}) voor {symbol}.")
 
