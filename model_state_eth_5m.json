@@ -1,13 +1,13 @@
 {
-    "learning_rate": 0.06499999999999999,
+    "learning_rate": 0.05999999999999999,
     "max_depth": 4,
     "n_estimators": 50,
-    "baseline_error": 2.4480779705327222,
-    "last_prediction": 2453.0580760203584,
-    "last_prediction_price": 2453.0580760203584,
+    "baseline_error": 1.0619239796415059,
+    "last_prediction": 2450.8903334701226,
+    "last_prediction_price": 2450.8903334701226,
     "search_direction": -1,
-    "lookback_window": 190,
-    "current_regime": "trending",
+    "lookback_window": 180,
+    "current_regime": "sideways",
     "regime_features": {
         "trending": [
             "return_1",
@@ -46,7 +46,8 @@
             "regime_score",
             "smc_zone_dist",
             "lorentzian_dist",
-            "ADX"
+            "ADX",
+            "MACD_hist"
         ]
     },
     "active_features": [
@@ -63,25 +64,25 @@
         "Supertrend_dist",
         "CMF",
         "ATR_percentile",
-        "ADX",
+        "regime_score",
         "smc_zone_dist",
-        "MACD_hist",
         "lorentzian_dist",
-        "regime_score"
+        "ADX",
+        "MACD_hist"
     ],
-    "last_trained_timestamp": 1792137024.9571362,
+    "last_trained_timestamp": 1792137316.8365653,
     "model_weights": {
-        "xgb": 0.32027710512527385,
-        "cat": 0.34347761493062196,
-        "rf": 0.33624527994410414
+        "xgb": 0.19735347762404484,
+        "cat": 0.37738756034063015,
+        "rf": 0.42525896203532504
     },
     "model_errors": {
-        "xgb": 3.009814453124818,
-        "cat": 2.8065137810326632,
-        "rf": 2.866879380467708
+        "xgb": 5.454960937499891,
+        "cat": 2.8526523464283855,
+        "rf": 2.5315292683953885
     },
-    "direction_probability": 62.19171905517578,
-    "stop_loss": 2461.742142857143,
-    "take_profit": 2446.2964285714284,
-    "updated_at": 1792137024
+    "direction_probability": 66.04971313476562,
+    "stop_loss": 2459.088214285714,
+    "take_profit": 2445.8396428571427,
+    "updated_at": 1792137316
 }
