@@ -2,6 +2,7 @@ import os
 import time
 import json
 import threading
+import subprocess
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import ccxt
 from datetime import datetime, timezone
@@ -65,6 +66,17 @@ exchange = ccxt.kucoin({
         'defaultType': 'swap',
     }
 })
+
+def pull_latest_states_from_github():
+    """Haalt automatisch de nieuwste JSON-bestanden op van GitHub zodat de trader up-to-date data gebruikt."""
+    try:
+        result = subprocess.run(['git', 'pull', 'origin', 'main'], capture_output=True, text=True)
+        if result.returncode == 0:
+            print("🔄 Verse JSON-bestanden succesvol opgehaald van GitHub via git pull.")
+        else:
+            print(f"⚠️ Git pull waarschuwing: {result.stderr.strip()}")
+    except Exception as e:
+        print(f"❌ Fout bij git pull in trader_worker: {e}")
 
 def manage_open_positions_and_trailing_stops():
     """Beheert open posities, past trailing stops toe en sluit bij tegenwind of trailing stop hit (draait elke minuut)."""
@@ -145,6 +157,9 @@ def manage_open_positions_and_trailing_stops():
 
 def execute_live_trades_scan():
     """Voert de filtering uit op basis van harde en zachte filters (puntsysteem) en zoekt naar nieuwe trades (draait elke 15 minuten)."""
+    # Stap 0: Haal direct de nieuwste model states op van GitHub voor de scan
+    pull_latest_states_from_github()
+    
     print("--- [Futures Live Trader Worker] Start geoptimaliseerde scoring filtering ---")
     
     try:
