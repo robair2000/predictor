@@ -8,14 +8,14 @@ import ccxt
 # Pagina configuratie
 st.set_page_config(
     page_title="RV Predictor",
-    page_icon="📈",
+    page_icon="⚡",
     layout="wide"
 )
 
-st.title("📈 RV Predictor")
+st.title("⚡ RV Predictor")
 st.markdown("*Its magic*")
 
-# Sidebar: Asset keuze & Tijdinterval (Timescales)
+# Sidebar: Asset keuze & Tijdinterval (Timescales) - 5m verwijderd om API te ontlasten
 asset_options = {
     'Bitcoin (BTC)': 'BTC',
     'Ethereum (ETH)': 'ETH',
@@ -23,7 +23,6 @@ asset_options = {
 }
 
 interval_options = {
-    '5 Minuten': {'interval': '5m', 'limit': 500, 'code': '5m'},
     '15 Minuten': {'interval': '15m', 'limit': 500, 'code': '15m'},
     '1 Uur': {'interval': '1h', 'limit': 500, 'code': '1h'},
     '1 Dag': {'interval': '1d', 'limit': 365, 'code': '1d'},
@@ -100,7 +99,7 @@ if df is not None and not df.empty:
 
                 # Extra institutionele metrics rij 2
                 col5, col6, col7, col8 = st.columns(4)
-                prob_color = "🟢" if prob >= 50 else "🔴"
+                prob_color = "📈" if prob >= 50 else "📉"
                 col5.metric(f"{prob_color} Kans op stijging", f"{prob:.1f}%")
                 col6.metric("Lookback-venster", f"{lookback} candles")
                 col7.metric("Stop-Loss (SL)", f"${sl:,.2f}" if sl > 0 else "N.v.t.")
