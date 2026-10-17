@@ -1,26 +1,26 @@
 {
-    "learning_rate": 0.01,
+    "learning_rate": 0.015,
     "max_depth": 5,
     "n_estimators": 100,
     "previous_learning_rate": 0.045000000000000005,
     "previous_max_depth": 5,
-    "baseline_error": 0.07890617146175138,
-    "last_prediction": 12.344932923705647,
+    "baseline_error": 0.07223292370564671,
+    "last_prediction": 12.34141348667454,
     "search_direction": 1,
-    "lookback_window": 240,
+    "lookback_window": 230,
     "model_weights": {
-        "xgb": 0.2893934832302442,
-        "cat": 0.2173515816250017,
-        "rf": 0.49325493514475405
+        "xgb": 0.3172236358354272,
+        "cat": 0.23597222532208217,
+        "rf": 0.4468041388424906
     },
     "model_errors": {
-        "xgb": 0.07675008697509789,
-        "cat": 0.10218916081635676,
-        "rf": 0.04502939836337383
+        "xgb": 0.07220299224853477,
+        "cat": 0.0970643748455089,
+        "rf": 0.05126294148216637
     },
-    "direction_probability": 78.12344360351562,
-    "stop_loss": 12.222082142857142,
-    "take_profit": 12.371996428571428,
+    "direction_probability": 11.045262336730957,
+    "stop_loss": 12.218560714285715,
+    "take_profit": 12.362932142857144,
     "active_features": [
         "return_1",
         "dist_sma20",
@@ -33,15 +33,16 @@
         "OBV_slope",
         "VWAP_dist",
         "Supertrend_dist",
-        "regime_score",
         "lorentzian_dist",
-        "smc_zone_dist",
-        "ATR_percentile",
+        "regime_score",
         "CMF",
-        "MACD_hist"
+        "ATR_percentile",
+        "smc_zone_dist",
+        "MACD_hist",
+        "ADX"
     ],
-    "last_trained_timestamp": 1792215315.8217099,
-    "current_regime": "trending",
+    "last_trained_timestamp": 1792216222.303765,
+    "current_regime": "sideways",
     "regime_features": {
         "trending": [
             "return_1",
@@ -83,6 +84,6 @@
             "ADX"
         ]
     },
-    "last_prediction_price": 12.344932923705647,
-    "updated_at": 1792215315
+    "last_prediction_price": 12.34141348667454,
+    "updated_at": 1792216222
 }
