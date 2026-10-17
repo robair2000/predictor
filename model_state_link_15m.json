@@ -62,33 +62,33 @@
         "ADX",
         "lorentzian_dist"
     ],
-    "last_trained_timestamp": 1792242942.8877332,
+    "last_trained_timestamp": 1792243873.681191,
     "model_weights": {
-        "xgb": 0.331186154797497,
-        "cat": 0.35301885406058187,
-        "rf": 0.3157949911419212
+        "xgb": 0.33875133724636214,
+        "cat": 0.3575450231924136,
+        "rf": 0.3037036395612242
     },
     "model_errors": {
-        "xgb": 0.001442129039415449,
-        "cat": 0.001352939493059336,
-        "rf": 0.0015124153329662232
+        "xgb": 0.0014607780467703905,
+        "cat": 0.0013839949261539946,
+        "rf": 0.0016293533805726438
     },
-    "baseline_error": 1.0526256750402971,
-    "last_prediction": 12.038733184125508,
-    "last_prediction_price": 12.038733184125508,
-    "predicted_return_pct": 0.18002000587087347,
-    "direction_probability": 56.27124786376953,
-    "signal": "long",
-    "signal_probability": 56.27124786376953,
-    "holdout_direction_accuracy": 0.5614035087719298,
-    "holdout_classifier_accuracy": 0.5789473684210527,
+    "baseline_error": 1.0111116962223718,
+    "last_prediction": 12.039572285421706,
+    "last_prediction_price": 12.039572285421706,
+    "predicted_return_pct": -0.1751781785327075,
+    "direction_probability": 34.497032165527344,
+    "signal": "short",
+    "signal_probability": 65.50296783447266,
+    "holdout_direction_accuracy": 0.5964912280701754,
+    "holdout_classifier_accuracy": 0.543859649122807,
     "holdout_samples": 57,
-    "atr": 0.030814285714285714,
-    "atr_pct": 0.25642031533635995,
-    "last_close": 12.0171,
-    "last_candle_ts": 1792242000,
+    "atr": 0.033035714285714314,
+    "atr_pct": 0.2739120804407233,
+    "last_close": 12.0607,
+    "last_candle_ts": 1792242900,
     "data_status": "ok",
-    "stop_loss": 11.970878571428571,
-    "take_profit": 12.094135714285713,
-    "updated_at": 1792242942
+    "stop_loss": 12.110253571428572,
+    "take_profit": 11.978110714285714,
+    "updated_at": 1792243873
 }
