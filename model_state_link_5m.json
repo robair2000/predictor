@@ -1,12 +1,12 @@
 {
-    "learning_rate": 0.015,
+    "learning_rate": 0.02,
     "max_depth": 4,
     "n_estimators": 50,
-    "baseline_error": 0.009167976013991108,
-    "last_prediction": 12.31282907115965,
-    "last_prediction_price": 12.31282907115965,
+    "baseline_error": 0.006429071159649524,
+    "last_prediction": 12.320234711192892,
+    "last_prediction_price": 12.320234711192892,
     "search_direction": 1,
-    "lookback_window": 180,
+    "lookback_window": 190,
     "current_regime": "sideways",
     "regime_features": {
         "trending": [
@@ -68,19 +68,19 @@
         "MACD_hist",
         "lorentzian_dist"
     ],
-    "last_trained_timestamp": 1792199722.0586946,
+    "last_trained_timestamp": 1792200023.1147532,
     "model_weights": {
-        "xgb": 0.016703416251800014,
-        "cat": 0.01429177297187978,
-        "rf": 0.9690048107763202
+        "xgb": 0.09951745800222886,
+        "cat": 0.08130805928972777,
+        "rf": 0.8191744827080434
     },
     "model_errors": {
-        "xgb": 0.04963425445556702,
-        "cat": 0.05800971217964168,
-        "rf": 0.0008555706641342198
+        "xgb": 0.04633933410644531,
+        "cat": 0.05671729171951867,
+        "rf": 0.005629527819243307
     },
-    "direction_probability": 16.114871978759766,
-    "stop_loss": 12.288289285714285,
-    "take_profit": 12.351517857142857,
-    "updated_at": 1792199722
+    "direction_probability": 87.8973388671875,
+    "stop_loss": 12.283075,
+    "take_profit": 12.345275,
+    "updated_at": 1792200023
 }
