@@ -1,26 +1,26 @@
 {
-    "learning_rate": 0.01,
+    "learning_rate": 0.015,
     "max_depth": 5,
     "n_estimators": 100,
     "previous_learning_rate": 0.045000000000000005,
     "previous_max_depth": 5,
-    "baseline_error": 0.07497124690793555,
-    "last_prediction": 12.302662584902047,
+    "baseline_error": 0.07086258490204678,
+    "last_prediction": 12.30212029052186,
     "search_direction": 1,
-    "lookback_window": 200,
+    "lookback_window": 190,
     "model_weights": {
-        "xgb": 0.21318650814068313,
-        "cat": 0.23346220504665252,
-        "rf": 0.5533512868126642
+        "xgb": 0.21401261182328224,
+        "cat": 0.22711709830186905,
+        "rf": 0.5588702898748488
     },
     "model_errors": {
-        "xgb": 0.12534030914306626,
-        "cat": 0.11445476850262537,
-        "rf": 0.0482891430283825
+        "xgb": 0.10952671356201193,
+        "cat": 0.10320710363966867,
+        "rf": 0.04194192285744691
     },
-    "direction_probability": 25.165424346923828,
-    "stop_loss": 12.187378571428571,
-    "take_profit": 12.281035714285714,
+    "direction_probability": 22.87140655517578,
+    "stop_loss": 12.195157142857143,
+    "take_profit": 12.292871428571429,
     "active_features": [
         "return_1",
         "dist_sma20",
@@ -35,13 +35,12 @@
         "Supertrend_dist",
         "regime_score",
         "smc_zone_dist",
-        "ATR_percentile",
         "CMF",
         "MACD_hist",
         "ADX",
         "lorentzian_dist"
     ],
-    "last_trained_timestamp": 1792232122.9954617,
+    "last_trained_timestamp": 1792233036.3273766,
     "current_regime": "trending",
     "regime_features": {
         "trending": [
@@ -58,7 +57,6 @@
             "Supertrend_dist",
             "regime_score",
             "smc_zone_dist",
-            "ATR_percentile",
             "CMF",
             "MACD_hist",
             "ADX",
@@ -84,6 +82,6 @@
             "ADX"
         ]
     },
-    "last_prediction_price": 12.302662584902047,
-    "updated_at": 1792232122
+    "last_prediction_price": 12.30212029052186,
+    "updated_at": 1792233036
 }
