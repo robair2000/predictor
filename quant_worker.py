@@ -438,12 +438,12 @@ def main():
                 gc.collect()
                 
                 # --- VEREISTE PAUZE OM RATE LIMITS TE VOORKOMEN ---
-                time.sleep(1.5)
+                time.sleep(4.0)
                 
             except Exception as e:
                 print(f"❌ Fout bij {asset} ({tf_name}): {e}")
                 gc.collect()
-                time.sleep(1.5)
+                time.sleep(4.0)
                 pass
 
     push_to_github()
