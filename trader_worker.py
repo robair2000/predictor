@@ -107,7 +107,7 @@ def pull_latest_states_from_github():
     print("🔄 Verse JSON-bestanden succesvol opgehaald van GitHub via directe download.")
 
 def manage_open_positions_and_trailing_stops():
-    """Beheert open posities, past trailing stops toe en sluit bij tegenwind of trailing stop hit (draait elke minuut)."""
+    """Beheert open posities, past trailing stops toe en sluit op basis van trailing stop én 15m modelvoorspelling (draait elke minuut)."""
     try:
         positions = exchange.fetch_positions()
     except Exception as e:
@@ -134,12 +134,24 @@ def manage_open_positions_and_trailing_stops():
 
         base_asset = symbol.split('/')[0]
         state_file = f'model_state_{base_asset.lower()}_15m.json'
+        
+        # Haal de actuele 15m modelvoorspelling op om te controleren of daling/stijging verwacht wordt
+        model_predicts_drop = False
+        model_predicts_rise = False
         current_atr = current_price * 0.015
+        
         if os.path.exists(state_file):
             try:
                 with open(state_file, 'r', encoding='utf-8') as f:
                     st_data = json.load(f)
                     sl_val = st_data.get('stop_loss', 0)
+                    pred_price_15m = st_data.get('last_prediction', current_price)
+                    
+                    if pred_price_15m < current_price:
+                        model_predicts_drop = True
+                    else:
+                        model_predicts_rise = True
+                        
                     if sl_val > 0:
                         current_atr = abs(entry_price - sl_val) / 1.5
             except Exception:
@@ -163,46 +175,42 @@ def manage_open_positions_and_trailing_stops():
                     trade_info["sl"] = new_trailing_sl
                     print(f"📈 Trailing Stop Verhoogd voor {symbol} naar ${trade_info['sl']:.2f}")
 
+            # Sluit alleen als trailing stop geraakt is EN het 15m model voorspelt dat de prijs zal dalen
             if current_price <= trade_info["sl"]:
-                print(f"🛑 Trailing Stop geraakt voor Long {symbol} op ${current_price}. Positie sluiten...")
-                # sluit positie — stuur expliciet marginMode en probeer close_position wanneer beschikbaar
-                closed = False
-                params_close = {'reduceOnly': True, 'marginMode': DESIRED_MARGIN_MODE}
-                try:
-                    has = getattr(exchange, 'has', {}) or {}
-                    if has.get('closePosition') or has.get('close_position'):
-                        try:
-                            if hasattr(exchange, 'close_position'):
-                                exchange.close_position(symbol, {'marginMode': DESIRED_MARGIN_MODE})
-                            else:
-                                exchange.closePosition(symbol, {'marginMode': DESIRED_MARGIN_MODE})
-                            print(f"✅ Closed long position for {symbol} via close_position")
-                            closed = True
-                        except Exception:
-                            # fallback to reduce-only market order
+                if model_predicts_drop:
+                    print(f"🛑 Trailing Stop geraakt & 15m model voorspelt daling voor Long {symbol} op ${current_price}. Positie sluiten...")
+                    closed = False
+                    params_close = {'reduceOnly': True, 'marginMode': DESIRED_MARGIN_MODE}
+                    try:
+                        has = getattr(exchange, 'has', {}) or {}
+                        if has.get('closePosition') or has.get('close_position'):
+                            try:
+                                if hasattr(exchange, 'close_position'):
+                                    exchange.close_position(symbol, {'marginMode': DESIRED_MARGIN_MODE})
+                                else:
+                                    exchange.closePosition(symbol, {'marginMode': DESIRED_MARGIN_MODE})
+                                print(f"✅ Closed long position for {symbol} via close_position")
+                                closed = True
+                            except Exception:
+                                order = exchange.create_order(symbol, 'market', 'sell', contracts, None, params_close)
+                                oid = order.get('id') if isinstance(order, dict) else repr(order)
+                                print(f"✅ Long reduced (fallback) closed: {oid}")
+                                closed = True
+                        else:
                             order = exchange.create_order(symbol, 'market', 'sell', contracts, None, params_close)
                             oid = order.get('id') if isinstance(order, dict) else repr(order)
-                            print(f"✅ Long reduced (fallback) closed: {oid}")
+                            print(f"✅ Long order placed (reduceOnly): {oid}")
                             closed = True
-                    else:
-                        order = exchange.create_order(symbol, 'market', 'sell', contracts, None, params_close)
-                        oid = order.get('id') if isinstance(order, dict) else repr(order)
-                        print(f"✅ Long order placed (reduceOnly): {oid}")
-                        closed = True
-                except Exception as e:
-                    print(f"⛔ Fout bij sluiten Long {symbol}: {repr(e)}")
-                    for attr in ('last_http_response', 'last_response', 'last_json_response', 'last_http_response_headers'):
-                        if hasattr(exchange, attr):
-                            try:
-                                print(attr, "=", getattr(exchange, attr))
-                            except Exception:
-                                pass
-                    closed = False
+                    except Exception as e:
+                        print(f"⛔ Fout bij sluiten Long {symbol}: {repr(e)}")
+                        closed = False
 
-                if closed:
-                    if symbol in active_trade_peaks:
-                        del active_trade_peaks[symbol]
-                    symbol_cooldowns[symbol] = time.time()
+                    if closed:
+                        if symbol in active_trade_peaks:
+                            del active_trade_peaks[symbol]
+                        symbol_cooldowns[symbol] = time.time()
+                else:
+                    print(f"ℹ️ Trailing stop geraakt voor Long {symbol}, maar 15m model voorspelt nog geen daling. Positie blijft open.")
 
         elif side == 'short':
             if current_price < trade_info["peak_price"]:
@@ -212,46 +220,42 @@ def manage_open_positions_and_trailing_stops():
                     trade_info["sl"] = new_trailing_sl
                     print(f"📉 Trailing Stop Verlaagd voor {symbol} naar ${trade_info['sl']:.2f}")
 
+            # Sluit alleen als trailing stop geraakt is EN het 15m model voorspelt dat de prijs zal stijgen
             if current_price >= trade_info["sl"]:
-                print(f"🛑 Trailing Stop geraakt voor Short {symbol} op ${current_price}. Positie sluiten...")
-                # sluit positie — stuur expliciet marginMode en probeer close_position wanneer beschikbaar
-                closed = False
-                params_close = {'reduceOnly': True, 'marginMode': DESIRED_MARGIN_MODE}
-                try:
-                    has = getattr(exchange, 'has', {}) or {}
-                    if has.get('closePosition') or has.get('close_position'):
-                        try:
-                            if hasattr(exchange, 'close_position'):
-                                exchange.close_position(symbol, {'marginMode': DESIRED_MARGIN_MODE})
-                            else:
-                                exchange.closePosition(symbol, {'marginMode': DESIRED_MARGIN_MODE})
-                            print(f"✅ Closed short position for {symbol} via close_position")
-                            closed = True
-                        except Exception:
-                            # fallback to reduce-only market order
+                if model_predicts_rise:
+                    print(f"🛑 Trailing Stop geraakt & 15m model voorspelt stijging voor Short {symbol} op ${current_price}. Positie sluiten...")
+                    closed = False
+                    params_close = {'reduceOnly': True, 'marginMode': DESIRED_MARGIN_MODE}
+                    try:
+                        has = getattr(exchange, 'has', {}) or {}
+                        if has.get('closePosition') or has.get('close_position'):
+                            try:
+                                if hasattr(exchange, 'close_position'):
+                                    exchange.close_position(symbol, {'marginMode': DESIRED_MARGIN_MODE})
+                                else:
+                                    exchange.closePosition(symbol, {'marginMode': DESIRED_MARGIN_MODE})
+                                print(f"✅ Closed short position for {symbol} via close_position")
+                                closed = True
+                            except Exception:
+                                order = exchange.create_order(symbol, 'market', 'buy', contracts, None, params_close)
+                                oid = order.get('id') if isinstance(order, dict) else repr(order)
+                                print(f"✅ Short reduced (fallback) closed: {oid}")
+                                closed = True
+                        else:
                             order = exchange.create_order(symbol, 'market', 'buy', contracts, None, params_close)
                             oid = order.get('id') if isinstance(order, dict) else repr(order)
-                            print(f"✅ Short reduced (fallback) closed: {oid}")
+                            print(f"✅ Short order placed (reduceOnly): {oid}")
                             closed = True
-                    else:
-                        order = exchange.create_order(symbol, 'market', 'buy', contracts, None, params_close)
-                        oid = order.get('id') if isinstance(order, dict) else repr(order)
-                        print(f"✅ Short order placed (reduceOnly): {oid}")
-                        closed = True
-                except Exception as e:
-                    print(f"⛔ Fout bij sluiten Short {symbol}: {repr(e)}")
-                    for attr in ('last_http_response', 'last_response', 'last_json_response', 'last_http_response_headers'):
-                        if hasattr(exchange, attr):
-                            try:
-                                print(attr, "=", getattr(exchange, attr))
-                            except Exception:
-                                pass
-                    closed = False
+                    except Exception as e:
+                        print(f"⛔ Fout bij sluiten Short {symbol}: {repr(e)}")
+                        closed = False
 
-                if closed:
-                    if symbol in active_trade_peaks:
-                        del active_trade_peaks[symbol]
-                    symbol_cooldowns[symbol] = time.time()
+                    if closed:
+                        if symbol in active_trade_peaks:
+                            del active_trade_peaks[symbol]
+                        symbol_cooldowns[symbol] = time.time()
+                else:
+                    print(f"ℹ️ Trailing stop geraakt voor Short {symbol}, maar 15m model voorspelt nog geen stijging. Positie blijft open.")
 
 def execute_live_trades_scan():
     """Voert de filtering uit op basis van harde en zachte filters (puntsysteem) en zoekt naar nieuwe trades (draait elke 15 minuten)."""
@@ -418,7 +422,6 @@ def execute_live_trades_scan():
 
                             # 1) Probeer margin mode in te stellen als de exchange dit ondersteunt
                             if has.get('set_margin_mode') or has.get('setMarginMode'):
-                                # probeer tot 2 keer met kleine delay
                                 for attempt in range(2):
                                     try:
                                         if hasattr(exchange, 'set_margin_mode'):
@@ -426,34 +429,7 @@ def execute_live_trades_scan():
                                         else:
                                             exchange.setMarginMode(DESIRED_MARGIN_MODE, {'symbol': symbol})
                                         print(f"⚙️ Margin mode ingesteld op {DESIRED_MARGIN_MODE} voor {symbol}")
-                                        # geef de exchange even de tijd om de instelling toe te passen
                                         time.sleep(0.5)
-                                        # probeer te verifiëren dat de margin mode is toegepast waar mogelijk
-                                        try:
-                                            if hasattr(exchange, 'fetch_margin_mode'):
-                                                current_mode = exchange.fetch_margin_mode(symbol)
-                                            elif hasattr(exchange, 'fetchMarginMode'):
-                                                current_mode = exchange.fetchMarginMode(symbol)
-                                            else:
-                                                current_mode = None
-                                            if isinstance(current_mode, dict):
-                                                # sommige implementaties returnen dicts
-                                                current_mode_val = current_mode.get('marginMode') or current_mode.get('mode') or str(current_mode)
-                                            else:
-                                                current_mode_val = current_mode
-
-                                            if current_mode_val is not None:
-                                                try:
-                                                    cm = str(current_mode_val).lower()
-                                                    if DESIRED_MARGIN_MODE.lower() not in cm:
-                                                        print(f"⚠️ Verificatie mismatch: gewenste margin mode={DESIRED_MARGIN_MODE}, exchange rapporteert={current_mode_val}")
-                                                        raise Exception("Margin mode verificatie faalde")
-                                                    else:
-                                                        print(f"✅ Margin mode verificatie OK: {current_mode_val}")
-                                                except Exception:
-                                                    raise
-                                        except Exception:
-                                            pass
                                         break
                                     except Exception as e:
                                         print(f"⚠️ Poging {attempt+1}: kon margin mode niet instellen op {DESIRED_MARGIN_MODE} voor {symbol}: {repr(e)}")
@@ -464,7 +440,7 @@ def execute_live_trades_scan():
                             else:
                                 print("ℹ️ Exchange geeft geen set_margin_mode aan; verifieer margin mode in KuCoin UI indien nodig.")
 
-                            # 2) Nu leverage instellen (probeer unified call, fallback met param). retry once on transient fail.
+                            # 2) Nu leverage instellen
                             for attempt in range(2):
                                 try:
                                     exchange.set_leverage(LEVERAGE, symbol)
@@ -473,7 +449,6 @@ def execute_live_trades_scan():
                                     break
                                 except Exception as e_leverage:
                                     print(f"⚠️ Poging {attempt+1}: kon hefboom niet instellen met unified call voor {symbol}: {repr(e_leverage)}")
-                                    # fallback: try passing marginMode param
                                     try:
                                         exchange.set_leverage(LEVERAGE, symbol, {'marginMode': DESIRED_MARGIN_MODE})
                                         print(f"⚙️ Hefboom succesvol ingesteld op {LEVERAGE}x ({DESIRED_MARGIN_MODE}) voor {symbol} via fallback param")
@@ -494,7 +469,6 @@ def execute_live_trades_scan():
                         if not margin_and_leverage_ok:
                             print(f"⛔ Trade geannuleerd voor {symbol} omdat margin/leverage niet gegarandeerd zijn.")
                         else:
-                            # TRADE_AMOUNT_USDT is direct het totale positiebedrag (6.0 USDT)
                             position_usdt_value = TRADE_AMOUNT_USDT
                             
                             try:
@@ -510,39 +484,33 @@ def execute_live_trades_scan():
                             else:
                                 contract_amount = 1.0
 
-                            # Zorg dat we expliciet de margin mode meesturen in de order params
                             params = {
                                 'stopLoss': {'triggerPrice': stop_loss_val},
                                 'takeProfit': {'triggerPrice': take_profit_val},
                                 'marginMode': DESIRED_MARGIN_MODE,
                             }
 
+                            # Bereken afstand in percentages voor de logs
+                            tp_distance_pct = abs((take_profit_val - current_price) / current_price) * 100
+
                             if last_pred == 1:
+                                print(f"🎯 [Take Profit Doel] Voor Long {symbol} ingesteld op: ${take_profit_val:.2f} (+{tp_distance_pct:.2f}%)")
+                                print(f"🛑 [Stop Loss Start] Voor Long {symbol} ingesteld op: ${stop_loss_val:.2f}")
                                 print(f"🔥 Puntsysteem geslaagd ({score}/{max_score})! Sterk LONG signaal voor {symbol} ({contract_amount} contracten)!")
                                 try:
                                     order = exchange.create_order(symbol, 'market', 'buy', contract_amount, None, params)
                                     print(f"✅ Long order geplaatst: {order.get('id')}")
                                 except Exception as e:
                                     print(f"⛔ Fout bij orderplaatsing voor {symbol}: {repr(e)}")
-                                    for attr in ('last_http_response', 'last_response', 'last_json_response', 'last_http_response_headers'):
-                                        if hasattr(exchange, attr):
-                                            try:
-                                                print(attr, "=", getattr(exchange, attr))
-                                            except Exception:
-                                                pass
                             else:
+                                print(f"🎯 [Take Profit Doel] Voor Short {symbol} ingesteld op: ${take_profit_val:.2f} (-{tp_distance_pct:.2f}%)")
+                                print(f"🛑 [Stop Loss Start] Voor Short {symbol} ingesteld op: ${stop_loss_val:.2f}")
                                 print(f"🔥 Puntsysteem geslaagd ({score}/{max_score})! Sterk SHORT signaal voor {symbol} ({contract_amount} contracten)!")
                                 try:
                                     order = exchange.create_order(symbol, 'market', 'sell', contract_amount, None, params)
                                     print(f"✅ Short order geplaatst: {order.get('id')}")
                                 except Exception as e:
                                     print(f"⛔ Fout bij orderplaatsing voor {symbol}: {repr(e)}")
-                                    for attr in ('last_http_response', 'last_response', 'last_json_response', 'last_http_response_headers'):
-                                        if hasattr(exchange, attr):
-                                            try:
-                                                print(attr, "=", getattr(exchange, attr))
-                                            except Exception:
-                                                pass
                     else:
                         print(f"ℹ️ Signaal onder drempelwaarde of onvoldoende score ({score}/{max_score}) voor {symbol}.")
 
