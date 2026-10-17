@@ -1,26 +1,26 @@
 {
-    "learning_rate": 0.145,
+    "learning_rate": 0.15,
     "max_depth": 5,
     "n_estimators": 100,
     "previous_learning_rate": 0.05,
     "previous_max_depth": 5,
-    "baseline_error": 21.114276662978227,
-    "last_prediction": 81567.24025628617,
+    "baseline_error": 13.940256286165095,
+    "last_prediction": 81586.65333344901,
     "search_direction": 1,
-    "lookback_window": 250,
+    "lookback_window": 240,
     "model_weights": {
-        "xgb": 0.8091280738207564,
-        "cat": 0.07036759945367457,
-        "rf": 0.12050432672556903
+        "xgb": 0.5074076732041789,
+        "cat": 0.3121761567250365,
+        "rf": 0.18041617007078461
     },
     "model_errors": {
-        "xgb": 7.267187499994179,
-        "cat": 83.56239912977617,
-        "rf": 48.79563739019795
+        "xgb": 21.91093749999709,
+        "cat": 35.61379553512961,
+        "rf": 61.62295659809024
     },
-    "direction_probability": 28.783205032348633,
-    "stop_loss": 81451.47857142857,
-    "take_profit": 81713.13571428573,
+    "direction_probability": 12.11262321472168,
+    "stop_loss": 81453.66785714286,
+    "take_profit": 81719.35357142858,
     "active_features": [
         "return_1",
         "dist_sma20",
@@ -34,14 +34,13 @@
         "VWAP_dist",
         "Supertrend_dist",
         "ADX",
-        "regime_score",
         "CMF",
         "lorentzian_dist",
         "smc_zone_dist",
         "ATR_percentile",
         "MACD_hist"
     ],
-    "last_trained_timestamp": 1792211716.786652,
+    "last_trained_timestamp": 1792212621.818352,
     "current_regime": "sideways",
     "regime_features": {
         "trending": [
@@ -76,7 +75,6 @@
             "VWAP_dist",
             "Supertrend_dist",
             "ADX",
-            "regime_score",
             "CMF",
             "lorentzian_dist",
             "smc_zone_dist",
@@ -84,6 +82,6 @@
             "MACD_hist"
         ]
     },
-    "last_prediction_price": 81567.24025628617,
-    "updated_at": 1792211716
+    "last_prediction_price": 81586.65333344901,
+    "updated_at": 1792212621
 }
