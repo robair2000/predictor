@@ -43,7 +43,7 @@ LEVERAGE = 10                         # Vaste hefboom van 10x
 DESIRED_MARGIN_MODE = os.environ.get('MARGIN_MODE', 'cross')
 
 # Basis & Risico Drempels
-MIN_DIRECTION_PROBABILITY = 60.0      # Minimale stijgings-/daalwinst kans (60%)
+MIN_DIRECTION_PROBABILITY = 65.0      # Minimale stijgings-/daalwinst kans (60%)
 MIN_PREDICTED_RETURN_PCT = 0.30       # Minimale verwachte koersbeweging in %
 MIN_RRR = 1.55                        # Minimale Risk/Reward Ratio (Harde filter)
 MIN_ATR_PCT = 0.25                    # Minimale volatiliteit (% ATR) (Harde filter)
