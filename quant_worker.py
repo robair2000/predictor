@@ -23,8 +23,8 @@ logging.getLogger('xgboost').setLevel(logging.CRITICAL)
 
 assets = ['BTC', 'ETH', 'LINK']
 
+# 5m timeframe is verwijderd om API rate limits te ontlasten
 timeframes = {
-    '5m': {'interval': '5m', 'limit': 500, 'horizon': 1, 'min_interval_seconds': 4 * 60},
     '15m': {'interval': '15m', 'limit': 500, 'horizon': 1, 'min_interval_seconds': 14 * 60},
     '1h': {'interval': '1h', 'limit': 500, 'horizon': 1, 'min_interval_seconds': 55 * 60},
     '1d': {'interval': '1d', 'limit': 365, 'horizon': 1, 'min_interval_seconds': 23 * 3600},
@@ -234,7 +234,7 @@ def main():
 
                 df = fetch_data_safely(symbol, tf_info)
                 if df is None or df.empty or len(df) < 60:
-                    time.sleep(1.0) # Korte pauze bij overslaan
+                    time.sleep(1.0)
                     continue
 
                 df['SMA_20'] = df['close'].rolling(window=20).mean()
