@@ -195,6 +195,7 @@ def push_to_github():
         subprocess.run(['git', 'config', 'user.email', 'render-worker@bot.com'], capture_output=True, text=True)
         subprocess.run(['git', 'config', 'user.name', 'Render Quant Bot'], capture_output=True, text=True)
         
+        # Voeg alleen de JSON-modelbestanden toe
         subprocess.run(['git', 'add', '*.json'], capture_output=True, text=True)
 
         status = subprocess.run(['git', 'status', '--porcelain'], capture_output=True, text=True)
@@ -205,12 +206,10 @@ def push_to_github():
         commit_res = subprocess.run(['git', 'commit', '-m', 'Auto-update Smart Evolutionary Ensemble [skip ci]'], capture_output=True, text=True)
         print(f"📝 Git commit status: {commit_res.stdout.strip()}")
 
-        pull_res = subprocess.run(['git', 'pull', '--rebase', repo_url, 'main'], capture_output=True, text=True)
-        if pull_res.returncode != 0:
-            print(f"⚠️ Git pull waarschuwing/fout: {pull_res.stderr.strip()}")
-            subprocess.run(['git', 'rebase', '--abort'], capture_output=True, text=True)
-
-        push_res = subprocess.run(['git', 'push', repo_url, 'HEAD:main'], capture_output=True, text=True)
+        # Haal de remote op en forceer de push om rebase-conflicten definitief te vermijden
+        subprocess.run(['git', 'fetch', repo_url, 'main'], capture_output=True, text=True)
+        push_res = subprocess.run(['git', 'push', '-f', repo_url, 'HEAD:main'], capture_output=True, text=True)
+        
         if push_res.returncode == 0:
             print("✅ JSON-bestanden succesvol gepusht naar GitHub!")
         else:
