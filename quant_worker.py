@@ -41,6 +41,14 @@ optional_features = [
     'MACD_hist', 'ADX', 'CMF', 'ATR_percentile', 'regime_score', 'smc_zone_dist', 'lorentzian_dist'
 ]
 
+# --- CENTRALE EXCHANGE INSTANTIE VOOR RATE LIMITING ---
+exchange = ccxt.kucoin({
+    'enableRateLimit': True,
+    'options': {
+        'defaultType': 'swap',
+    }
+})
+
 def get_market_regime(df):
     try:
         if 'ADX' in df.columns and not pd.isna(df['ADX'].iloc[-1]):
@@ -163,9 +171,6 @@ def update_dynamic_weights(state, preds, current_price):
 
 def fetch_data_safely(symbol, tf_info):
     try:
-        exchange = ccxt.kucoin({
-            'enableRateLimit': True,
-        })
         ohlcv = exchange.fetch_ohlcv(symbol, timeframe=tf_info['interval'], limit=tf_info['limit'])
         if not ohlcv:
             return pd.DataFrame()
@@ -224,13 +229,13 @@ def main():
             try:
                 state = load_or_init_state(state_file)
                 
-                # Interval check voor ALLE timeframes (inclusief 15m)
                 last_trained = state.get('last_trained_timestamp', 0)
                 if current_time - last_trained < tf_info['min_interval_seconds']:
                     continue
 
                 df = fetch_data_safely(symbol, tf_info)
                 if df is None or df.empty or len(df) < 60:
+                    time.sleep(1.0) # Korte pauze bij overslaan
                     continue
 
                 df['SMA_20'] = df['close'].rolling(window=20).mean()
@@ -367,6 +372,7 @@ def main():
                 current_features = state['active_features']
                 df_clean = df.dropna(subset=current_features + ['close']).reset_index(drop=True)
                 if df_clean.empty:
+                    time.sleep(1.0)
                     continue
 
                 lookback = state['lookback_window']
@@ -431,10 +437,14 @@ def main():
 
                 del model_xgb, model_cat, model_rf, df, df_clean, df_train, X, y_reg, y_class
                 gc.collect()
-                time.sleep(1)
+                
+                # --- VEREISTE PAUZE OM RATE LIMITS TE VOORKOMEN ---
+                time.sleep(1.5)
+                
             except Exception as e:
                 print(f"❌ Fout bij {asset} ({tf_name}): {e}")
                 gc.collect()
+                time.sleep(1.5)
                 pass
 
     push_to_github()
