@@ -37,13 +37,13 @@ TIMEFRAMES = ['15m', '1h']
 TRADE_CHECK_INTERVAL_SECONDS = 900    # Elke 15 minuten nieuwe trades zoeken
 POSITION_CHECK_INTERVAL_SECONDS = 60  # Elke 1 minuut open posities / trailing stops controleren
 
-TRADE_AMOUNT_USDT = 6.0               # Totale gewenste positiewaarde in USDT (~$6 totaal met 10x hefboom)
+TRADE_AMOUNT_USDT = 20.0               # Totale gewenste positiewaarde in USDT (~$6 totaal met 10x hefboom)
 LEVERAGE = 10                         # Vaste hefboom van 10x
 # Maak gewenste margin mode expliciet en consistent (kan overschreven worden via env)
 DESIRED_MARGIN_MODE = os.environ.get('MARGIN_MODE', 'cross')
 
 # Basis & Risico Drempels
-MIN_DIRECTION_PROBABILITY = 65.0      # Minimale stijgings-/daalwinst kans (60%)
+MIN_DIRECTION_PROBABILITY = 65.0      # Minimale stijgings-/daalwinst kans (65%)
 MIN_PREDICTED_RETURN_PCT = 0.30       # Minimale verwachte koersbeweging in %
 MIN_RRR = 1.55                        # Minimale Risk/Reward Ratio (Harde filter)
 MIN_ATR_PCT = 0.25                    # Minimale volatiliteit (% ATR) (Harde filter)
@@ -269,10 +269,26 @@ def execute_live_trades_scan():
         print(f"Fout bij verbinden met KuCoin Futures: {e}")
         return
 
+    # Haal actuele posities op om te controleren of er al getraded wordt voor een munt
+    try:
+        open_positions = exchange.fetch_positions()
+        active_symbols = set()
+        for p in open_positions:
+            if float(p.get('contracts', 0)) > 0:
+                active_symbols.add(p.get('symbol'))
+    except Exception as e:
+        print(f"Waarschuwing bij ophalen open posities voor scan: {e}")
+        active_symbols = set()
+
     for asset in ASSETS:
         symbol = f"{asset}/USDT:USDT"
         if symbol not in exchange.markets:
             symbol = f"{asset}/USDT"
+
+        # --- CONTROLE: AL EEN OPEN POSITIE? ---
+        if symbol in active_symbols or f"{asset}/USDT" in active_symbols:
+            print(f"⏳ Er is al een open positie voor {symbol}, geen nieuwe trade nodig.")
+            continue
 
         # --- CIRCUIT BREAKER / COOLDOWN ---
         if symbol in symbol_cooldowns:
