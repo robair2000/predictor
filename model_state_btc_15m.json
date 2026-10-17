@@ -1,6 +1,6 @@
 {
-    "learning_rate": 0.04,
-    "lookback_window": 170,
+    "learning_rate": 0.03,
+    "lookback_window": 190,
     "current_regime": "trending",
     "regime_features": {
         "trending": [
@@ -43,33 +43,33 @@
         "VWAP_dist",
         "Supertrend_dist"
     ],
-    "last_trained_timestamp": 1792246523.2782867,
+    "last_trained_timestamp": 1792247437.314473,
     "model_weights": {
-        "xgb": 0.34185545255275757,
-        "cat": 0.32664011627718625,
-        "rf": 0.3315044311700563
+        "xgb": 0.3397872005363846,
+        "cat": 0.33247045057916336,
+        "rf": 0.3277423488844521
     },
     "model_errors": {
-        "xgb": 0.0002817580478665543,
-        "cat": 0.00029488276356539527,
-        "rf": 0.00029055580033985424
+        "xgb": 0.0003196295169582431,
+        "cat": 0.00032666369568662906,
+        "rf": 0.00033137625085850533
     },
-    "baseline_error": 1.064243316097346,
-    "last_prediction": 81499.73398670556,
-    "last_prediction_price": 81499.73398670556,
-    "predicted_return_pct": 4.170163272638269e-05,
-    "direction_probability": 43.71626281738281,
-    "signal": "none",
-    "signal_probability": 50.0,
-    "holdout_direction_accuracy": 0.5,
-    "holdout_classifier_accuracy": 0.5714285714285714,
-    "holdout_samples": 42,
-    "atr": 40.871428571424204,
-    "atr_pct": 0.05014917671037342,
-    "last_close": 81499.7,
-    "last_candle_ts": 1792245600,
+    "baseline_error": 1.0363346806668117,
+    "last_prediction": 81540.81509478869,
+    "last_prediction_price": 81540.81509478869,
+    "predicted_return_pct": -0.03394068201734218,
+    "direction_probability": 45.314632415771484,
+    "signal": "short",
+    "signal_probability": 54.685367584228516,
+    "holdout_direction_accuracy": 0.48936170212765956,
+    "holdout_classifier_accuracy": 0.5319148936170213,
+    "holdout_samples": 47,
+    "atr": 46.59999999999646,
+    "atr_pct": 0.05712989695776735,
+    "last_close": 81568.5,
+    "last_candle_ts": 1792246500,
     "data_status": "ok",
-    "stop_loss": 81438.39285714286,
-    "take_profit": 81601.87857142856,
-    "updated_at": 1792246523
+    "stop_loss": 81638.4,
+    "take_profit": 81452.00000000001,
+    "updated_at": 1792247437
 }
