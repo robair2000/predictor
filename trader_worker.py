@@ -3,6 +3,7 @@ import urllib.error
 import os
 import time
 import json
+import math
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import ccxt
@@ -37,7 +38,7 @@ TIMEFRAMES = ['15m', '1h']
 TRADE_CHECK_INTERVAL_SECONDS = 900    # Elke 15 minuten nieuwe trades zoeken
 POSITION_CHECK_INTERVAL_SECONDS = 60  # Elke 1 minuut open posities / trailing stops controleren
 
-TRADE_AMOUNT_USDT = 20.0               # Totale gewenste positiewaarde in USDT (~$6 totaal met 10x hefboom)
+TRADE_AMOUNT_USDT = 20.0               # Gewenste margin in USDT (~$20 margin met 10x hefboom = $200 notional)
 LEVERAGE = 10                         # Vaste hefboom van 10x
 # Maak gewenste margin mode expliciet en consistent (kan overschreven worden via env)
 DESIRED_MARGIN_MODE = os.environ.get('MARGIN_MODE', 'cross')
@@ -485,7 +486,8 @@ def execute_live_trades_scan():
                         if not margin_and_leverage_ok:
                             print(f"⛔ Trade geannuleerd voor {symbol} omdat margin/leverage niet gegarandeerd zijn.")
                         else:
-                            position_usdt_value = TRADE_AMOUNT_USDT
+                            # Aangepast: gewenste margin ($20) * hefboom (10x) = $200 totale positiewaarde (notional)
+                            position_usdt_value = TRADE_AMOUNT_USDT * LEVERAGE
                             
                             try:
                                 market_info = exchange.market(symbol)
@@ -496,7 +498,8 @@ def execute_live_trades_scan():
                             notional_per_contract = current_price * contract_size
                             if notional_per_contract > 0:
                                 raw_amount = position_usdt_value / notional_per_contract
-                                contract_amount = max(1.0, round(raw_amount))
+                                # Gebruik math.ceil zodat we altijd minimaal het gewenste bedrag halen
+                                contract_amount = max(1.0, math.ceil(raw_amount))
                             else:
                                 contract_amount = 1.0
 
@@ -512,7 +515,7 @@ def execute_live_trades_scan():
                             if last_pred == 1:
                                 print(f"🎯 [Take Profit Doel] Voor Long {symbol} ingesteld op: ${take_profit_val:.2f} (+{tp_distance_pct:.2f}%)")
                                 print(f"🛑 [Stop Loss Start] Voor Long {symbol} ingesteld op: ${stop_loss_val:.2f}")
-                                print(f"🔥 Puntsysteem geslaagd ({score}/{max_score})! Sterk LONG signaal voor {symbol} ({contract_amount} contracten)!")
+                                print(f"🔥 Puntsysteem geslaagd ({score}/{max_score})! Sterk LONG signaal voor {symbol} ({contract_amount} contracten, ~${TRADE_AMOUNT_USDT} margin)!")
                                 try:
                                     order = exchange.create_order(symbol, 'market', 'buy', contract_amount, None, params)
                                     print(f"✅ Long order geplaatst: {order.get('id')}")
@@ -521,7 +524,7 @@ def execute_live_trades_scan():
                             else:
                                 print(f"🎯 [Take Profit Doel] Voor Short {symbol} ingesteld op: ${take_profit_val:.2f} (-{tp_distance_pct:.2f}%)")
                                 print(f"🛑 [Stop Loss Start] Voor Short {symbol} ingesteld op: ${stop_loss_val:.2f}")
-                                print(f"🔥 Puntsysteem geslaagd ({score}/{max_score})! Sterk SHORT signaal voor {symbol} ({contract_amount} contracten)!")
+                                print(f"🔥 Puntsysteem geslaagd ({score}/{max_score})! Sterk SHORT signaal voor {symbol} ({contract_amount} contracten, ~${TRADE_AMOUNT_USDT} margin)!")
                                 try:
                                     order = exchange.create_order(symbol, 'market', 'sell', contract_amount, None, params)
                                     print(f"✅ Short order geplaatst: {order.get('id')}")
@@ -534,7 +537,7 @@ def execute_live_trades_scan():
                 print(f"Fout bij verwerken filters voor {asset}: {e}")
 
 if __name__ == '__main__':
-    print("Futures Live Trader Worker is gestart met automatische contract-filtering (~$6 positie / 10x hefboom cross) (24/7)...")
+    print("Futures Live Trader Worker is gestart met ~ $20 margin / 10x hefboom cross (24/7)...")
     last_trade_check_time = 0
 
     while True:
