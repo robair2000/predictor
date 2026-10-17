@@ -1,26 +1,26 @@
 {
-    "learning_rate": 0.015,
+    "learning_rate": 0.01,
     "max_depth": 5,
     "n_estimators": 100,
     "previous_learning_rate": 0.045000000000000005,
     "previous_max_depth": 5,
-    "baseline_error": 0.07244658292164807,
-    "last_prediction": 12.297471246907936,
+    "baseline_error": 0.07497124690793555,
+    "last_prediction": 12.302662584902047,
     "search_direction": 1,
-    "lookback_window": 210,
+    "lookback_window": 200,
     "model_weights": {
-        "xgb": 0.23880494383402587,
-        "cat": 0.27328734499178214,
-        "rf": 0.4879077111741919
+        "xgb": 0.21318650814068313,
+        "cat": 0.23346220504665252,
+        "rf": 0.5533512868126642
     },
     "model_errors": {
-        "xgb": 0.09738945465087845,
-        "cat": 0.08510120695052592,
-        "rf": 0.047666966978102465
+        "xgb": 0.12534030914306626,
+        "cat": 0.11445476850262537,
+        "rf": 0.0482891430283825
     },
-    "direction_probability": 29.707685470581055,
-    "stop_loss": 12.192450000000001,
-    "take_profit": 12.28645,
+    "direction_probability": 25.165424346923828,
+    "stop_loss": 12.187378571428571,
+    "take_profit": 12.281035714285714,
     "active_features": [
         "return_1",
         "dist_sma20",
@@ -38,9 +38,10 @@
         "ATR_percentile",
         "CMF",
         "MACD_hist",
-        "ADX"
+        "ADX",
+        "lorentzian_dist"
     ],
-    "last_trained_timestamp": 1792231244.4236681,
+    "last_trained_timestamp": 1792232122.9954617,
     "current_regime": "trending",
     "regime_features": {
         "trending": [
@@ -60,7 +61,8 @@
             "ATR_percentile",
             "CMF",
             "MACD_hist",
-            "ADX"
+            "ADX",
+            "lorentzian_dist"
         ],
         "sideways": [
             "return_1",
@@ -82,6 +84,6 @@
             "ADX"
         ]
     },
-    "last_prediction_price": 12.297471246907936,
-    "updated_at": 1792231244
+    "last_prediction_price": 12.302662584902047,
+    "updated_at": 1792232122
 }
