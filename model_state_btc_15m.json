@@ -1,26 +1,26 @@
 {
-    "learning_rate": 0.12999999999999998,
+    "learning_rate": 0.12499999999999997,
     "max_depth": 5,
     "n_estimators": 100,
     "previous_learning_rate": 0.05,
     "previous_max_depth": 5,
-    "baseline_error": 50.8700227427762,
-    "last_prediction": 81613.54697600732,
+    "baseline_error": 181.64697600732325,
+    "last_prediction": 81531.77184035424,
     "search_direction": 1,
-    "lookback_window": 220,
+    "lookback_window": 230,
     "model_weights": {
-        "xgb": 0.5466173695931336,
-        "cat": 0.2531969587665782,
-        "rf": 0.2001856716402882
+        "xgb": 0.4429151964119867,
+        "cat": 0.2953859156880284,
+        "rf": 0.2616988878999849
     },
     "model_errors": {
-        "xgb": 25.51875000000291,
-        "cat": 55.0914674141095,
-        "rf": 69.68027176707983
+        "xgb": 75.16250000000582,
+        "cat": 112.7021015008504,
+        "rf": 127.20960994245252
     },
-    "direction_probability": 35.909305572509766,
-    "stop_loss": 81476.3,
-    "take_profit": 81730.7,
+    "direction_probability": 16.009510040283203,
+    "stop_loss": 81321.33928571428,
+    "take_profit": 81616.16785714285,
     "active_features": [
         "return_1",
         "dist_sma20",
@@ -34,14 +34,13 @@
         "VWAP_dist",
         "Supertrend_dist",
         "ATR_percentile",
-        "smc_zone_dist",
         "MACD_hist",
         "CMF",
         "regime_score",
         "lorentzian_dist",
         "ADX"
     ],
-    "last_trained_timestamp": 1792203623.3698094,
+    "last_trained_timestamp": 1792204516.954404,
     "current_regime": "trending",
     "regime_features": {
         "trending": [
@@ -57,7 +56,6 @@
             "VWAP_dist",
             "Supertrend_dist",
             "ATR_percentile",
-            "smc_zone_dist",
             "MACD_hist",
             "CMF",
             "regime_score",
@@ -85,6 +83,6 @@
             "MACD_hist"
         ]
     },
-    "last_prediction_price": 81613.54697600732,
-    "updated_at": 1792203623
+    "last_prediction_price": 81531.77184035424,
+    "updated_at": 1792204516
 }
